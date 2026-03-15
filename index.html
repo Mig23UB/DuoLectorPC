@@ -88,7 +88,7 @@ a{text-decoration:none;color:inherit;cursor:pointer}
 #app{display:flex;flex-direction:column;height:100svh;background:var(--bg);overflow:hidden}
 #topbar{height:var(--topbar-h);background:var(--glass2);backdrop-filter:blur(20px) saturate(180%);
   border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 12px;gap:8px;flex-shrink:0;z-index:50}
-.tb-menu-btn{display:flex}
+.tb-menu-btn{display:flex!important}
 .tb-center{flex:1;display:flex;align-items:center;justify-content:center;gap:8px;min-width:0}
 .tb-logo{height:28px;width:28px;object-fit:contain;border-radius:8px;flex-shrink:0}
 .tb-title{font-family:'Cormorant Garamond',serif;font-size:1.25rem;font-weight:500;letter-spacing:.02em;white-space:nowrap}
@@ -142,7 +142,7 @@ a{text-decoration:none;color:inherit;cursor:pointer}
   body{background:var(--bg2)}
   #app{max-width:1200px;margin:0 auto}
   #desktop-sidebar{display:flex}
-  .tb-menu-btn{display:none}
+  .tb-menu-btn{display:flex!important}
   #bottom-nav{display:none}
   .page{padding-bottom:16px}
   #sidebar-overlay,#sidebar{display:none!important}
@@ -1199,13 +1199,13 @@ a{text-decoration:none;color:inherit;cursor:pointer}
   <div class="auth-card">
     <img id="auth-logo-img" src="" alt="" class="auth-logo">
     <div class="auth-title display">DuoLector</div>
-    <div class="auth-sub">El espacio de tu pareja ❤️</div>
+    <div class="auth-sub" id="auth-sub-text">Your couple's space ❤️</div>
     <div class="auth-tabs">
-      <div class="auth-tab active" data-tab="login" onclick="AuthScreen.setTab('login')">Entrar</div>
-      <div class="auth-tab" data-tab="register" onclick="AuthScreen.setTab('register')">Registrarse</div>
+      <div class="auth-tab active" data-tab="login" onclick="AuthScreen.setTab('login')">Sign In</div>
+      <div class="auth-tab" data-tab="register" onclick="AuthScreen.setTab('register')">Sign Up</div>
     </div>
     <div id="auth-form-area"></div>
-    <div class="auth-footer">Solo para dos · DuoLector 🧡</div>
+    <div class="auth-footer">Made with love · DuoLector 🧡</div>
   </div>
 </div>
 
@@ -1227,7 +1227,7 @@ a{text-decoration:none;color:inherit;cursor:pointer}
 
   <!-- Topbar -->
   <div id="topbar">
-    <button class="tb-icon-btn tb-menu-btn" onclick="Sidebar.open()">
+    <button class="tb-icon-btn tb-menu-btn" id="menu-toggle-btn" onclick="window.innerWidth>=768?App.toggleSidebar():Sidebar.open()">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
     </button>
     <div class="tb-center">
@@ -1242,6 +1242,7 @@ a{text-decoration:none;color:inherit;cursor:pointer}
       </div>
     </div>
     <div class="tb-right">
+      <a href="https://www.paypal.com/donate/?hosted_button_id=WJDEG9WTHZ5KE" target="_blank" style="font-size:.6rem;color:var(--amber);opacity:.7;text-decoration:none;padding:2px 5px;border:1px solid rgba(232,168,74,.25);border-radius:6px;white-space:nowrap;transition:opacity .2s" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='.7'" title="Support DuoLector">💛 Donate</a>
       <span class="tb-days" id="tb-days" onclick="showKmDetails && showKmDetails()" style="display:none">📅 0</span>
       <span class="tb-km" id="tb-km" onclick="showKmDetails && showKmDetails()" style="display:none">✈️ 0km</span>
       <div class="notif-wrap">
@@ -1339,10 +1340,10 @@ const DB = (() => {
 
   // ── Auth ──
   const Auth = {
-    async signUp(email, password, displayName) {
+    async signUp(email, password, displayName, lang) {
       const { data, error } = await client().auth.signUp({
         email, password,
-        options: { data: { full_name: displayName } }
+        options: { data: { full_name: displayName, lang: lang || 'en' } }
       });
       if (error) throw error;
       return data;
@@ -1762,6 +1763,288 @@ const AppAuth = (() => {
   }
 
   return { init, createCouple, joinCouple, signOut, currentCoupleId };
+})();
+
+
+// ── i18n — Internationalization ───────────────────────────────────────────────
+// English is the default language. Users select their country/language on signup
+// and can change it in Settings.
+
+const I18N = (() => {
+
+  const LANGS = {
+    en: {
+      code: 'en', flag: '🇬🇧', label: 'English',
+      // Auth
+      welcome: 'Welcome to DuoLector',
+      tagline: 'Your couple\'s space ❤️',
+      signIn: 'Sign In', signUp: 'Sign Up',
+      email: 'Email', password: 'Password', name: 'Your name',
+      createAccount: 'Create account', enterApp: 'Enter',
+      orGoogle: 'or', continueGoogle: 'Continue with Google',
+      // Couple setup
+      createSpace: '✨ Create our space', joinSpace: '💛 Join our couple',
+      yourEmoji: 'Your emoji', spaceName: 'Space name (optional)',
+      inviteCode: 'Invite code', yourTimezone: 'Your timezone', yourCity: 'Your city',
+      yourLanguage: 'Your language',
+      // Nav
+      home: 'Home', chat: 'Chat', diary: 'Diary', library: 'Library',
+      reader: 'Reader', music: 'Music', draw: 'Draw', translate: 'Translate',
+      stats: 'Stats', challenges: 'Challenges', settings: 'Settings',
+      // Home
+      goodMorning: 'Good morning', goodAfternoon: 'Good afternoon', goodEvening: 'Good evening',
+      daysTogether: 'days together', daysUntil: 'days', toOurMeeting: 'until our meeting 💛',
+      quickAccess: 'Quick access', quoteOfDay: 'Quote of the day',
+      configureDate: '⚙️ Set your start date →', configureMeeting: 'Meeting date not set',
+      // Settings
+      yourProfile: 'Your profile', yourCouple: 'Your couple',
+      appearance: 'Appearance', darkMode: 'Dark mode',
+      yourDates: 'Your dates', metDate: 'When did you meet?', meetingDate: 'When will you meet? (optional)',
+      saveDates: '💾 Save dates', saveProfile: '💾 Save profile',
+      signOut: 'Sign out', copyLink: '🔗 Invite link', copyCode: '📋 Code',
+      supportProject: 'Support the project', supportText: 'We\'re building this together. Every donation helps us grow and unite more couples around the world. 💛',
+      legal: 'Legal', termsText: 'By using DuoLector you agree not to upload copyrighted content without permission. The user is responsible for uploaded content.',
+      privacyText: 'Your data is stored securely in Supabase. We do not sell or share your personal information.',
+      // Challenges
+      challenges: 'Challenges', thisMonth: 'This month',
+      completed: 'Completed ✓',
+      // Reader
+      yourVersion: '📄 Your PDF', partnerVersion: '📄 Second PDF',
+      publicDomainOnly: '⚠️ Only public domain books · gutenberg.org',
+      ready: '✓ Done',
+      // Chat
+      typeMessage: 'Write something...',
+      // Diary
+      newEntry: '✏️ New entry', howAreYou: 'How are you feeling?',
+      writeEntry: 'Write your entry', tags: 'Tags (comma separated)',
+      saveEntry: '💾 Save entry',
+    },
+
+    es: {
+      code: 'es', flag: '🇪🇸', label: 'Español',
+      welcome: 'Bienvenido a DuoLector',
+      tagline: 'El espacio de tu pareja ❤️',
+      signIn: 'Entrar', signUp: 'Registrarse',
+      email: 'Email', password: 'Contraseña', name: 'Tu nombre',
+      createAccount: 'Crear cuenta', enterApp: 'Entrar',
+      orGoogle: 'o', continueGoogle: 'Continuar con Google',
+      createSpace: '✨ Crear nuestro espacio', joinSpace: '💛 Unirme a nuestra pareja',
+      yourEmoji: 'Tu emoji', spaceName: 'Nombre del espacio (opcional)',
+      inviteCode: 'Código de invitación', yourTimezone: 'Tu zona horaria', yourCity: 'Tu ciudad',
+      yourLanguage: 'Tu idioma',
+      home: 'Inicio', chat: 'Chat', diary: 'Diario', library: 'Biblioteca',
+      reader: 'Lector', music: 'Música', draw: 'Dibujar', translate: 'Traducir',
+      stats: 'Estadísticas', challenges: 'Retos', settings: 'Ajustes',
+      goodMorning: 'Buenos días', goodAfternoon: 'Buenas tardes', goodEvening: 'Buenas noches',
+      daysTogether: 'días juntos', daysUntil: 'días', toOurMeeting: 'para nuestro encuentro 💛',
+      quickAccess: 'Acceso rápido', quoteOfDay: 'Frase del día',
+      configureDate: '⚙️ Configura tu fecha de inicio →', configureMeeting: 'Fecha de encuentro no configurada',
+      yourProfile: 'Tu perfil', yourCouple: 'Tu pareja',
+      appearance: 'Apariencia', darkMode: 'Tema oscuro',
+      yourDates: 'Sus fechas', metDate: '¿Cuándo se conocieron?', meetingDate: '¿Cuándo se van a ver? (opcional)',
+      saveDates: '💾 Guardar fechas', saveProfile: '💾 Guardar perfil',
+      signOut: 'Cerrar sesión', copyLink: '🔗 Link de invitación', copyCode: '📋 Código',
+      supportProject: 'Apoyar el proyecto', supportText: 'Lo estamos construyendo juntos. Cada donación nos ayuda a crecer y unir más parejas en el mundo. 💛',
+      legal: 'Legal', termsText: 'Al usar DuoLector aceptás no subir contenido con copyright sin permiso.',
+      privacyText: 'Tus datos se almacenan de forma segura en Supabase. No vendemos ni compartimos tu información.',
+      challenges: 'Retos', thisMonth: 'Este mes', completed: 'Completado ✓',
+      yourVersion: '📄 Tu versión', partnerVersion: '📄 Segunda versión',
+      publicDomainOnly: '⚠️ Solo dominio público · gutenberg.org',
+      ready: '✓ Listo',
+      typeMessage: 'Escribe algo bonito...',
+      newEntry: '✏️ Nueva entrada', howAreYou: '¿Cómo te sientes?',
+      writeEntry: 'Escribe tu entrada', tags: 'Etiquetas (separadas por coma)',
+      saveEntry: '💾 Guardar entrada',
+    },
+
+    ru: {
+      code: 'ru', flag: '🇷🇺', label: 'Русский',
+      welcome: 'Добро пожаловать в DuoLector',
+      tagline: 'Пространство вашей пары ❤️',
+      signIn: 'Войти', signUp: 'Регистрация',
+      email: 'Email', password: 'Пароль', name: 'Ваше имя',
+      createAccount: 'Создать аккаунт', enterApp: 'Войти',
+      orGoogle: 'или', continueGoogle: 'Войти через Google',
+      createSpace: '✨ Создать наше пространство', joinSpace: '💛 Присоединиться',
+      yourEmoji: 'Твой эмодзи', spaceName: 'Название пространства (необязательно)',
+      inviteCode: 'Код приглашения', yourTimezone: 'Часовой пояс', yourCity: 'Твой город',
+      yourLanguage: 'Язык интерфейса',
+      home: 'Главная', chat: 'Чат', diary: 'Дневник', library: 'Библиотека',
+      reader: 'Читалка', music: 'Музыка', draw: 'Рисовать', translate: 'Перевод',
+      stats: 'Статистика', challenges: 'Задания', settings: 'Настройки',
+      goodMorning: 'Доброе утро', goodAfternoon: 'Добрый день', goodEvening: 'Добрый вечер',
+      daysTogether: 'дней вместе', daysUntil: 'дней', toOurMeeting: 'до нашей встречи 💛',
+      quickAccess: 'Быстрый доступ', quoteOfDay: 'Цитата дня',
+      configureDate: '⚙️ Настрой дату знакомства →', configureMeeting: 'Дата встречи не установлена',
+      yourProfile: 'Профиль', yourCouple: 'Ваша пара',
+      appearance: 'Внешний вид', darkMode: 'Тёмная тема',
+      yourDates: 'Ваши даты', metDate: 'Когда познакомились?', meetingDate: 'Когда встретитесь? (необязательно)',
+      saveDates: '💾 Сохранить даты', saveProfile: '💾 Сохранить профиль',
+      signOut: 'Выйти', copyLink: '🔗 Ссылка-приглашение', copyCode: '📋 Код',
+      supportProject: 'Поддержать проект', supportText: 'Мы строим это вместе. Каждая донация помогает нам расти и объединять больше пар. 💛',
+      legal: 'Юридическое', termsText: 'Используя DuoLector, вы соглашаетесь не загружать защищённый авторским правом контент.',
+      privacyText: 'Ваши данные хранятся безопасно в Supabase. Мы не продаём личные данные.',
+      challenges: 'Задания', thisMonth: 'В этом месяце', completed: 'Выполнено ✓',
+      yourVersion: '📄 Твой PDF', partnerVersion: '📄 Второй PDF',
+      publicDomainOnly: '⚠️ Только общественное достояние · gutenberg.org',
+      ready: '✓ Готово',
+      typeMessage: 'Напиши что-нибудь...',
+      newEntry: '✏️ Новая запись', howAreYou: 'Как ты себя чувствуешь?',
+      writeEntry: 'Напиши запись', tags: 'Теги (через запятую)',
+      saveEntry: '💾 Сохранить запись',
+    },
+
+    pt: {
+      code: 'pt', flag: '🇧🇷', label: 'Português',
+      welcome: 'Bem-vindo ao DuoLector',
+      tagline: 'O espaço do seu casal ❤️',
+      signIn: 'Entrar', signUp: 'Cadastrar',
+      email: 'Email', password: 'Senha', name: 'Seu nome',
+      createAccount: 'Criar conta', enterApp: 'Entrar',
+      orGoogle: 'ou', continueGoogle: 'Continuar com Google',
+      createSpace: '✨ Criar nosso espaço', joinSpace: '💛 Entrar no casal',
+      yourEmoji: 'Seu emoji', spaceName: 'Nome do espaço (opcional)',
+      inviteCode: 'Código de convite', yourTimezone: 'Seu fuso horário', yourCity: 'Sua cidade',
+      yourLanguage: 'Seu idioma',
+      home: 'Início', chat: 'Chat', diary: 'Diário', library: 'Biblioteca',
+      reader: 'Leitor', music: 'Música', draw: 'Desenhar', translate: 'Traduzir',
+      stats: 'Estatísticas', challenges: 'Desafios', settings: 'Configurações',
+      goodMorning: 'Bom dia', goodAfternoon: 'Boa tarde', goodEvening: 'Boa noite',
+      daysTogether: 'dias juntos', daysUntil: 'dias', toOurMeeting: 'para nosso encontro 💛',
+      quickAccess: 'Acesso rápido', quoteOfDay: 'Frase do dia',
+      configureDate: '⚙️ Configure sua data →', configureMeeting: 'Data do encontro não configurada',
+      yourProfile: 'Seu perfil', yourCouple: 'Seu casal',
+      appearance: 'Aparência', darkMode: 'Tema escuro',
+      yourDates: 'Suas datas', metDate: 'Quando se conheceram?', meetingDate: 'Quando vão se encontrar? (opcional)',
+      saveDates: '💾 Salvar datas', saveProfile: '💾 Salvar perfil',
+      signOut: 'Sair', copyLink: '🔗 Link de convite', copyCode: '📋 Código',
+      supportProject: 'Apoiar o projeto', supportText: 'Estamos construindo juntos. Cada doação nos ajuda a crescer. 💛',
+      legal: 'Legal', termsText: 'Ao usar o DuoLector você concorda em não enviar conteúdo protegido por direitos autorais.',
+      privacyText: 'Seus dados são armazenados com segurança no Supabase.',
+      challenges: 'Desafios', thisMonth: 'Este mês', completed: 'Concluído ✓',
+      yourVersion: '📄 Seu PDF', partnerVersion: '📄 Segundo PDF',
+      publicDomainOnly: '⚠️ Somente domínio público · gutenberg.org',
+      ready: '✓ Pronto',
+      typeMessage: 'Escreva algo bonito...',
+      newEntry: '✏️ Nova entrada', howAreYou: 'Como você está?',
+      writeEntry: 'Escreva sua entrada', tags: 'Tags (separadas por vírgula)',
+      saveEntry: '💾 Salvar entrada',
+    },
+
+    fr: {
+      code: 'fr', flag: '🇫🇷', label: 'Français',
+      welcome: 'Bienvenue sur DuoLector',
+      tagline: 'L\'espace de votre couple ❤️',
+      signIn: 'Se connecter', signUp: "S'inscrire",
+      email: 'Email', password: 'Mot de passe', name: 'Votre prénom',
+      createAccount: 'Créer un compte', enterApp: 'Entrer',
+      orGoogle: 'ou', continueGoogle: 'Continuer avec Google',
+      createSpace: '✨ Créer notre espace', joinSpace: '💛 Rejoindre notre couple',
+      yourEmoji: 'Votre emoji', spaceName: "Nom de l'espace (optionnel)",
+      inviteCode: "Code d'invitation", yourTimezone: 'Votre fuseau horaire', yourCity: 'Votre ville',
+      yourLanguage: 'Votre langue',
+      home: 'Accueil', chat: 'Chat', diary: 'Journal', library: 'Bibliothèque',
+      reader: 'Lecteur', music: 'Musique', draw: 'Dessiner', translate: 'Traduire',
+      stats: 'Statistiques', challenges: 'Défis', settings: 'Paramètres',
+      goodMorning: 'Bonjour', goodAfternoon: 'Bon après-midi', goodEvening: 'Bonsoir',
+      daysTogether: 'jours ensemble', daysUntil: 'jours', toOurMeeting: 'avant notre rencontre 💛',
+      quickAccess: 'Accès rapide', quoteOfDay: 'Citation du jour',
+      configureDate: '⚙️ Configurer votre date →', configureMeeting: 'Date de rencontre non configurée',
+      yourProfile: 'Votre profil', yourCouple: 'Votre couple',
+      appearance: 'Apparence', darkMode: 'Mode sombre',
+      yourDates: 'Vos dates', metDate: 'Quand vous êtes-vous rencontrés?', meetingDate: 'Quand allez-vous vous voir? (optionnel)',
+      saveDates: '💾 Sauvegarder', saveProfile: '💾 Sauvegarder le profil',
+      signOut: 'Se déconnecter', copyLink: '🔗 Lien d\'invitation', copyCode: '📋 Code',
+      supportProject: 'Soutenir le projet', supportText: 'Nous construisons ceci ensemble. Chaque don nous aide à grandir. 💛',
+      legal: 'Légal', termsText: 'En utilisant DuoLector vous acceptez de ne pas télécharger de contenu protégé.',
+      privacyText: 'Vos données sont stockées en toute sécurité dans Supabase.',
+      challenges: 'Défis', thisMonth: 'Ce mois-ci', completed: 'Complété ✓',
+      yourVersion: '📄 Votre PDF', partnerVersion: '📄 Deuxième PDF',
+      publicDomainOnly: '⚠️ Domaine public uniquement · gutenberg.org',
+      ready: '✓ Prêt',
+      typeMessage: 'Écrivez quelque chose...',
+      newEntry: '✏️ Nouvelle entrée', howAreYou: 'Comment vous sentez-vous?',
+      writeEntry: 'Écrivez votre entrée', tags: 'Tags (séparés par virgule)',
+      saveEntry: '💾 Sauvegarder',
+    },
+
+    de: {
+      code: 'de', flag: '🇩🇪', label: 'Deutsch',
+      welcome: 'Willkommen bei DuoLector',
+      tagline: 'Der Raum für dein Paar ❤️',
+      signIn: 'Anmelden', signUp: 'Registrieren',
+      email: 'E-Mail', password: 'Passwort', name: 'Dein Name',
+      createAccount: 'Konto erstellen', enterApp: 'Einloggen',
+      orGoogle: 'oder', continueGoogle: 'Mit Google fortfahren',
+      createSpace: '✨ Unseren Raum erstellen', joinSpace: '💛 Unserem Paar beitreten',
+      yourEmoji: 'Dein Emoji', spaceName: 'Raumname (optional)',
+      inviteCode: 'Einladungscode', yourTimezone: 'Deine Zeitzone', yourCity: 'Deine Stadt',
+      yourLanguage: 'Deine Sprache',
+      home: 'Startseite', chat: 'Chat', diary: 'Tagebuch', library: 'Bibliothek',
+      reader: 'Leser', music: 'Musik', draw: 'Zeichnen', translate: 'Übersetzen',
+      stats: 'Statistiken', challenges: 'Herausforderungen', settings: 'Einstellungen',
+      goodMorning: 'Guten Morgen', goodAfternoon: 'Guten Tag', goodEvening: 'Guten Abend',
+      daysTogether: 'Tage zusammen', daysUntil: 'Tage', toOurMeeting: 'bis zu unserem Treffen 💛',
+      quickAccess: 'Schnellzugriff', quoteOfDay: 'Zitat des Tages',
+      configureDate: '⚙️ Startdatum festlegen →', configureMeeting: 'Treffendatum nicht konfiguriert',
+      yourProfile: 'Dein Profil', yourCouple: 'Dein Paar',
+      appearance: 'Erscheinungsbild', darkMode: 'Dunkler Modus',
+      yourDates: 'Eure Daten', metDate: 'Wann habt ihr euch kennengelernt?', meetingDate: 'Wann werdet ihr euch sehen? (optional)',
+      saveDates: '💾 Daten speichern', saveProfile: '💾 Profil speichern',
+      signOut: 'Abmelden', copyLink: '🔗 Einladungslink', copyCode: '📋 Code',
+      supportProject: 'Projekt unterstützen', supportText: 'Wir bauen das gemeinsam. Jede Spende hilft uns zu wachsen. 💛',
+      legal: 'Rechtliches', termsText: 'Mit der Nutzung von DuoLector stimmen Sie zu, keine urheberrechtlich geschützten Inhalte hochzuladen.',
+      privacyText: 'Ihre Daten werden sicher in Supabase gespeichert.',
+      challenges: 'Herausforderungen', thisMonth: 'Diesen Monat', completed: 'Abgeschlossen ✓',
+      yourVersion: '📄 Dein PDF', partnerVersion: '📄 Zweites PDF',
+      publicDomainOnly: '⚠️ Nur gemeinfreie Werke · gutenberg.org',
+      ready: '✓ Fertig',
+      typeMessage: 'Schreibe etwas Schönes...',
+      newEntry: '✏️ Neuer Eintrag', howAreYou: 'Wie geht es dir?',
+      writeEntry: 'Schreibe deinen Eintrag', tags: 'Tags (durch Komma getrennt)',
+      saveEntry: '💾 Eintrag speichern',
+    },
+  };
+
+  // Country → default language mapping
+  const COUNTRY_LANG = {
+    'us':'en','gb':'en','au':'en','ca':'en','nz':'en','ie':'en',
+    'es':'es','mx':'es','ar':'es','co':'es','pe':'es','cl':'es','ve':'es',
+    'bo':'es','ec':'es','py':'es','uy':'es','cr':'es','pa':'es',
+    'br':'pt','pt':'pt',
+    'ru':'ru','by':'ru','kz':'ru','kg':'ru',
+    'fr':'fr','be':'fr','ch':'fr',
+    'de':'de','at':'de',
+  };
+
+  // All languages for picker, grouped
+  const ALL_LANGS = [
+    {code:'en',flag:'🇬🇧',label:'English'},
+    {code:'es',flag:'🇪🇸',label:'Español'},
+    {code:'ru',flag:'🇷🇺',label:'Русский'},
+    {code:'pt',flag:'🇧🇷',label:'Português'},
+    {code:'fr',flag:'🇫🇷',label:'Français'},
+    {code:'de',flag:'🇩🇪',label:'Deutsch'},
+  ];
+
+  function get(key) {
+    var lang = (State.get('profile')?.lang) || 'en';
+    var dict = LANGS[lang] || LANGS['en'];
+    return dict[key] || LANGS['en'][key] || key;
+  }
+
+  function current() {
+    return State.get('profile')?.lang || 'en';
+  }
+
+  function fromCountry(countryCode) {
+    return COUNTRY_LANG[(countryCode||'').toLowerCase()] || 'en';
+  }
+
+  function allLangs() { return ALL_LANGS; }
+  function allDicts() { return LANGS; }
+
+  return { get, current, fromCountry, allLangs, allDicts, LANGS };
 })();
 
 
@@ -2910,549 +3193,504 @@ const PageLibrary = (() => {
 })();
 
 
-// ── READER PAGE — Full featured PDF reader with sync ──────────────────────────
+// ── READER PAGE — Immersive PDF reader ────────────────────────────────────────
 const PageReader = (() => {
-  // State per pane
   const S = {
-    a: { pdf:null, cur:1, tot:0, rendering:false, type:null, pages:[] },
-    b: { pdf:null, cur:1, tot:0, rendering:false, type:null, pages:[] }
+    a: { pdf:null, cur:1, tot:0, rendering:false, type:null, pages:[], url:null },
+    b: { pdf:null, cur:1, tot:0, rendering:false, type:null, pages:[], url:null }
   };
-  let _book      = null;
-  let _syncInt   = null;
-  let _channel   = null;
-  let _expanded  = null; // 'a' | 'b' | null
-  let _myPane    = 'a';  // which pane is "mine"
+  let _book    = null;
+  let _syncInt = null;
+  let _channel = null;
+  let _linked  = true;
+  let _readyA  = false; // "I finished this page" flags
+  let _readyB  = false;
+  let _myPane  = 'a';
 
   // ── Init ──────────────────────────────────────────────────────────────────
   async function init(container) {
-    container.style.cssText = 'padding:0;position:absolute;inset:0;display:flex;flex-direction:column;overflow:hidden';
+    container.style.cssText = 'padding:0;position:absolute;inset:0;display:flex;flex-direction:column;overflow:hidden;background:var(--bg)';
 
     _book = State.get('currentBook');
     if (!_book) {
-      // Try to restore from settings
-      const coupleId = AppAuth.currentCoupleId();
+      var coupleId = AppAuth.currentCoupleId();
       if (coupleId) {
         try {
-          const bookId = await DB.getSetting(coupleId, 'current_book_id');
-          if (bookId) {
-            const books = await DB.get('books', { eqOne: ['id', bookId] });
-            if (books[0]) { _book = books[0]; State.set('currentBook', _book); }
-          }
+          var bookId = await DB.getSetting(coupleId, 'current_book_id');
+          if (bookId) { var books = await DB.get('books',{eqOne:['id',bookId]}); if(books[0]){_book=books[0];State.set('currentBook',_book);} }
         } catch {}
       }
     }
 
-    const lang    = State.get('profile')?.lang || 'es';
-    const title   = _book ? Utils.escHtml(_book.title) : (lang==='ru'?'Читалка':'Lector');
+    var lang    = State.get('profile')?.lang || 'es';
+    var partner = State.get('partner');
+    var pLabel  = partner ? (partner.emoji + ' ' + partner.display_name) : (lang==='ru'?'Паreja':'Pareja');
 
-    container.innerHTML = _buildShell(title, lang);
-    _setupDrop('a');
-    _setupDrop('b');
+    container.innerHTML =
+      // ── Mini toolbar ──
+      '<div id="reader-bar" style="display:flex;align-items:center;gap:6px;padding:5px 10px;background:var(--glass2);border-bottom:1px solid var(--border);flex-shrink:0;backdrop-filter:blur(20px)">' +
+        '<button class="reader-btn" onclick="Router.go(\'library\')" style="flex-shrink:0">' +
+          '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>' +
+        '</button>' +
+        '<div style="flex:1;min-width:0;font-size:.78rem;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" id="reader-title">' + (_book ? Utils.escHtml(_book.title) : (lang==='ru'?'Читалка':'Lector')) + '</div>' +
+
+        // My page info
+        '<div style="display:flex;align-items:center;gap:5px;flex-shrink:0">' +
+          '<span style="font-size:.65rem;color:var(--muted)" id="bar-my-info">—/—</span>' +
+          // Partner page badge
+          '<span id="bar-partner-badge" style="font-size:.6rem;color:var(--rose);background:var(--rose-s);padding:2px 5px;border-radius:8px;display:none">' + (partner?partner.emoji:'') + ' <span id="bar-partner-page">—</span></span>' +
+        '</div>' +
+
+        // Link toggle
+        '<button id="link-btn" onclick="PageReader._toggleLink()" style="width:28px;height:28px;background:var(--surface2);border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:.75rem;color:var(--amber);border:none;cursor:pointer;flex-shrink:0" title="Enlazar">🔗</button>' +
+
+        // Fullscreen toggle
+        '<button onclick="PageReader._toggleFull()" style="width:28px;height:28px;background:var(--surface2);border-radius:7px;display:flex;align-items:center;justify-content:center;color:var(--muted);border:none;cursor:pointer;flex-shrink:0" id="fs-btn">' +
+          '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>' +
+        '</button>' +
+      '</div>' +
+
+      // ── Progress bars ──
+      '<div id="reader-prog" style="padding:4px 10px;background:var(--glass2);border-bottom:1px solid var(--border);display:none">' +
+        '<div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">' +
+          '<span style="font-size:.58rem;color:var(--muted);width:52px;flex-shrink:0" id="prog-my-lbl">Tú</span>' +
+          '<div style="flex:1;height:4px;background:var(--surface2);border-radius:2px;overflow:hidden"><div id="prog-my" style="height:100%;width:0%;background:var(--amber);border-radius:2px;transition:width .4s"></div></div>' +
+          '<span style="font-size:.58rem;color:var(--muted);width:28px;text-align:right" id="prog-my-pct">0%</span>' +
+        '</div>' +
+        '<div style="display:flex;align-items:center;gap:6px">' +
+          '<span style="font-size:.58rem;color:var(--muted);width:52px;flex-shrink:0" id="prog-partner-lbl">' + pLabel + '</span>' +
+          '<div style="flex:1;height:4px;background:var(--surface2);border-radius:2px;overflow:hidden"><div id="prog-partner" style="height:100%;width:0%;background:var(--rose);border-radius:2px;transition:width .4s"></div></div>' +
+          '<span style="font-size:.58rem;color:var(--muted);width:28px;text-align:right" id="prog-partner-pct">0%</span>' +
+        '</div>' +
+      '</div>' +
+
+      // ── Main reader area ──
+      '<div id="reader-main" style="flex:1;display:flex;overflow:hidden;position:relative">' +
+
+        // Panel A (mine)
+        '<div id="panel-a" style="flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0">' +
+          '<div id="canvas-wrap-a" style="flex:1;overflow:hidden;position:relative;background:var(--bg2)">' +
+            '<div id="drop-a" class="rdz" onclick="document.getElementById(\'file-a\').click()">' +
+              '<div class="rdz-icon">📄</div>' +
+              '<div class="rdz-text">' + (lang==='ru'?'Загрузи свой PDF':'Subí tu PDF') + '</div>' +
+              '<div class="rdz-sub">' + (lang==='ru'?'Только общественное достояние':'Solo dominio público · gutenberg.org') + '</div>' +
+            '</div>' +
+          '</div>' +
+          // Nav bar A
+          '<div id="nav-a" style="display:flex;align-items:center;gap:4px;padding:5px 8px;background:var(--glass2);border-top:1px solid var(--border);flex-shrink:0">' +
+            '<button class="reader-nav-btn" onclick="PageReader._go(\'a\',-1)">‹</button>' +
+            '<input type="number" id="pg-a" class="reader-page-input" value="1" min="1" onchange="PageReader._goTo(\'a\',+this.value)" onfocus="this.select()" style="width:48px">' +
+            '<button class="reader-nav-btn" onclick="PageReader._go(\'a\',1)">›</button>' +
+            '<span style="font-size:.65rem;color:var(--dim);margin-left:2px" id="tot-a"></span>' +
+            // "Ready" button — subtle
+            '<button id="ready-btn-a" onclick="PageReader._markReady(\'a\')" style="margin-left:auto;height:24px;padding:0 8px;border-radius:12px;background:rgba(112,200,160,.15);border:1px solid rgba(112,200,160,.3);color:var(--mint);font-size:.62rem;cursor:pointer;display:none">✓ ' + (lang==='ru'?'Готово':'Listo') + '</button>' +
+          '</div>' +
+        '</div>' +
+
+        // Divider
+        '<div id="reader-div" style="width:1px;background:var(--border);flex-shrink:0"></div>' +
+
+        // Panel B (partner / second PDF)
+        '<div id="panel-b" style="flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0">' +
+          '<div id="canvas-wrap-b" style="flex:1;overflow:hidden;position:relative;background:var(--bg2)">' +
+            '<div id="drop-b" class="rdz" onclick="document.getElementById(\'file-b\').click()">' +
+              '<div class="rdz-icon">📄</div>' +
+              '<div class="rdz-text">' + (lang==='ru'?'Второй PDF (необязательно)':'Segundo PDF (opcional)') + '</div>' +
+              '<div class="rdz-sub">' + (lang==='ru'?'Другой перевод или версия':'Otra versión o traducción') + '</div>' +
+            '</div>' +
+          '</div>' +
+          // Nav bar B
+          '<div id="nav-b" style="display:flex;align-items:center;gap:4px;padding:5px 8px;background:var(--glass2);border-top:1px solid var(--border);flex-shrink:0">' +
+            '<button class="reader-nav-btn" id="prev-b" onclick="PageReader._go(\'b\',-1)" style="display:none">‹</button>' +
+            '<input type="number" id="pg-b" class="reader-page-input" value="1" min="1" onchange="PageReader._goTo(\'b\',+this.value)" onfocus="this.select()" style="width:48px;display:none">' +
+            '<button class="reader-nav-btn" id="next-b" onclick="PageReader._go(\'b\',1)" style="display:none">›</button>' +
+            '<span style="font-size:.65rem;color:var(--dim);margin-left:2px" id="tot-b"></span>' +
+            '<button id="ready-btn-b" onclick="PageReader._markReady(\'b\')" style="margin-left:auto;height:24px;padding:0 8px;border-radius:12px;background:rgba(112,200,160,.15);border:1px solid rgba(112,200,160,.3);color:var(--mint);font-size:.62rem;cursor:pointer;display:none">✓ ' + (lang==='ru'?'Готово':'Listo') + '</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>' +
+
+      // Partner ready notification
+      '<div id="partner-ready-bar" style="display:none;padding:5px 14px;text-align:center;font-size:.72rem;color:var(--mint);background:rgba(112,200,160,.1);border-top:1px solid rgba(112,200,160,.2)">' +
+        (partner ? (partner.emoji + ' ' + partner.display_name + ' ' + (lang==='ru'?'готов(а) к следующей странице 👆':'terminó de leer esta página 👆')) : '') +
+      '</div>' +
+
+      // Copyright
+      '<div style="padding:3px 10px;font-size:.55rem;color:var(--dim);text-align:center;flex-shrink:0">⚠️ Solo libros de dominio público · gutenberg.org</div>' +
+
+      // Hidden inputs
+      '<input type="file" id="file-a" accept=".pdf,.txt" style="display:none" onchange="PageReader._onFile(event,\'a\')">' +
+      '<input type="file" id="file-b" accept=".pdf,.txt" style="display:none" onchange="PageReader._onFile(event,\'b\')">';
+
+    _setupDrop('a'); _setupDrop('b');
 
     if (_book?.file_url)            _loadDoc('a', _book.file_url, null);
     if (_book?.file_url_translated) _loadDoc('b', _book.file_url_translated, null);
 
-    _startSyncPolling();
+    _startSync();
     _initRealtime();
     _loadPartnerProgress();
+    _updateLinkedUI();
 
     document.onkeydown = function(e) {
-      if (e.key === 'ArrowRight') _go('a', 1);
-      if (e.key === 'ArrowLeft')  _go('a', -1);
-      if (e.key === 'Escape' && _expanded) _collapsePane();
+      if (e.key === 'ArrowRight' || e.key === 'PageDown') _go('a', 1);
+      if (e.key === 'ArrowLeft'  || e.key === 'PageUp')   _go('a', -1);
+      if (e.key === 'Escape') _exitFull();
     };
   }
 
-  function _buildShell(title, lang) {
-    return '<div class="reader-toolbar" id="reader-tb">' +
-      '<button class="reader-btn" onclick="Router.go(\'library\')">' +
-        '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>' +
-      '</button>' +
-      '<div class="reader-title-bar display">' + title + '</div>' +
-      '<div style="display:flex;align-items:center;gap:5px">' +
-        '<button class="reader-btn reader-btn-sm" id="link-btn" onclick="PageReader._toggleLink()" title="Enlazar páginas" style="color:var(--amber)">🔗</button>' +
-        '<button class="reader-btn reader-btn-sm" onclick="PageReader._syncNow()" title="Sincronizar">' +
-          '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>' +
-        '</button>' +
-      '</div>' +
-    '</div>' +
+  // ── Fullscreen ─────────────────────────────────────────────────────────────
+  var _fullPane = null;
 
-    // Progress bars — my progress + partner progress
-    '<div id="reader-progress-wrap" style="padding:6px 12px;background:var(--glass2);border-bottom:1px solid var(--border);display:none">' +
-      '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">' +
-        '<span style="font-size:.62rem;color:var(--muted);width:60px;flex-shrink:0" id="prog-my-label">Tú</span>' +
-        '<div style="flex:1;height:5px;background:var(--surface2);border-radius:3px;overflow:hidden">' +
-          '<div id="prog-my-bar" style="height:100%;width:0%;background:var(--amber);border-radius:3px;transition:width .5s"></div>' +
-        '</div>' +
-        '<span style="font-size:.62rem;color:var(--muted);width:36px;text-align:right" id="prog-my-pct">0%</span>' +
-      '</div>' +
-      '<div style="display:flex;align-items:center;gap:8px">' +
-        '<span style="font-size:.62rem;color:var(--muted);width:60px;flex-shrink:0" id="prog-partner-label">Pareja</span>' +
-        '<div style="flex:1;height:5px;background:var(--surface2);border-radius:3px;overflow:hidden">' +
-          '<div id="prog-partner-bar" style="height:100%;width:0%;background:var(--rose);border-radius:3px;transition:width .5s"></div>' +
-        '</div>' +
-        '<span style="font-size:.62rem;color:var(--muted);width:36px;text-align:right" id="prog-partner-pct">0%</span>' +
-      '</div>' +
-    '</div>' +
-
-    // Panels
-    '<div class="reader-panels" id="reader-panels">' +
-
-      // Panel A
-      '<div class="reader-panel" id="reader-panel-a">' +
-        '<div class="reader-panel-header">' +
-          '<span class="reader-panel-label" id="label-a">📄 Tu versión</span>' +
-          '<div style="display:flex;align-items:center;gap:4px">' +
-            '<span class="reader-page-info" id="rp-a-info">—/—</span>' +
-            '<button class="reader-expand-btn" onclick="PageReader._expand(\'a\')" title="Pantalla completa">' +
-              '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>' +
-            '</button>' +
-          '</div>' +
-        '</div>' +
-        '<div class="reader-canvas-wrap" id="rp-a">' +
-          '<div class="rdz" onclick="document.getElementById(\'file-a\').click()">' +
-            '<div class="rdz-icon">📄</div>' +
-            '<div class="rdz-text">Subir PDF o TXT</div>' +
-            '<div class="rdz-sub">Click o arrastrá · Solo dominio público</div>' +
-          '</div>' +
-        '</div>' +
-        '<div class="reader-nav-bar">' +
-          '<button class="reader-nav-btn" onclick="PageReader._go(\'a\',-10)">«</button>' +
-          '<button class="reader-nav-btn" onclick="PageReader._go(\'a\',-1)">‹</button>' +
-          '<input type="number" id="page-a-input" class="reader-page-input" value="1" min="1" onchange="PageReader._goTo(\'a\',+this.value)" onfocus="this.select()">' +
-          '<button class="reader-nav-btn" onclick="PageReader._go(\'a\',1)">›</button>' +
-          '<button class="reader-nav-btn" onclick="PageReader._go(\'a\',10)">»</button>' +
-        '</div>' +
-      '</div>' +
-
-      '<div class="reader-divider" id="reader-divider"></div>' +
-
-      // Panel B
-      '<div class="reader-panel" id="reader-panel-b">' +
-        '<div class="reader-panel-header">' +
-          '<span class="reader-panel-label" id="label-b">📄 Versión pareja</span>' +
-          '<div style="display:flex;align-items:center;gap:4px">' +
-            '<span class="reader-page-info" id="rp-b-info">—/—</span>' +
-            '<button class="reader-expand-btn" onclick="PageReader._expand(\'b\')" title="Pantalla completa">' +
-              '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>' +
-            '</button>' +
-          '</div>' +
-        '</div>' +
-        '<div class="reader-canvas-wrap" id="rp-b">' +
-          '<div class="rdz" onclick="document.getElementById(\'file-b\').click()">' +
-            '<div class="rdz-icon">📄</div>' +
-            '<div class="rdz-text">Subir PDF o TXT</div>' +
-            '<div class="rdz-sub">Click o arrastrá · Solo dominio público</div>' +
-          '</div>' +
-        '</div>' +
-        '<div class="reader-nav-bar">' +
-          '<button class="reader-nav-btn" onclick="PageReader._go(\'b\',-10)">«</button>' +
-          '<button class="reader-nav-btn" onclick="PageReader._go(\'b\',-1)">‹</button>' +
-          '<input type="number" id="page-b-input" class="reader-page-input" value="1" min="1" onchange="PageReader._goTo(\'b\',+this.value)" onfocus="this.select()">' +
-          '<button class="reader-nav-btn" onclick="PageReader._go(\'b\',1)">›</button>' +
-          '<button class="reader-nav-btn" onclick="PageReader._go(\'b\',10)">»</button>' +
-        '</div>' +
-      '</div>' +
-    '</div>' +
-
-    // Partner sync bar
-    '<div id="reader-sync-bar" style="display:none;padding:6px 14px;background:linear-gradient(90deg,var(--rose-s),transparent);border-top:1px solid rgba(224,120,144,.2);font-size:.72rem;color:var(--text2);text-align:center"></div>' +
-
-    // Copyright notice
-    '<div style="padding:4px 12px;background:var(--glass);border-top:1px solid var(--border);font-size:.6rem;color:var(--dim);text-align:center;flex-shrink:0">' +
-      '⚠️ Solo libros de dominio público o de tu propiedad · Project Gutenberg · gutenberg.org' +
-    '</div>' +
-
-    // Hidden file inputs
-    '<input type="file" id="file-a" accept=".pdf,.txt" style="display:none" onchange="PageReader._onFile(event,\'a\')">' +
-    '<input type="file" id="file-b" accept=".pdf,.txt" style="display:none" onchange="PageReader._onFile(event,\'b\')">';
+  function _toggleFull() {
+    if (_fullPane) _exitFull(); else _enterFull('a');
   }
 
-  // ── Expand / collapse pane ───────────────────────────────────────────────
-  function _expand(pane) {
-    _expanded = pane;
-    var other = pane === 'a' ? 'b' : 'a';
-    var panelOther  = document.getElementById('reader-panel-' + other);
-    var divider     = document.getElementById('reader-divider');
-    var expandBtn   = document.querySelector('#reader-panel-' + pane + ' .reader-expand-btn');
+  function _enterFull(pane) {
+    _fullPane = pane;
+    // Hide sidebar and other panel
+    var dskSB = document.getElementById('desktop-sidebar');
+    var divider = document.getElementById('reader-div');
+    var otherPanel = document.getElementById('panel-' + (pane==='a'?'b':'a'));
+    if (dskSB)     dskSB.style.display = 'none';
+    if (divider)   divider.style.display = 'none';
+    if (otherPanel)otherPanel.style.display = 'none';
 
-    if (panelOther)  panelOther.style.display  = 'none';
-    if (divider)     divider.style.display     = 'none';
+    var fsBtn = document.getElementById('fs-btn');
+    if (fsBtn) fsBtn.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="10" y1="14" x2="21" y2="3"/><line x1="3" y1="21" x2="14" y2="10"/></svg>';
 
-    // Show collapse button
-    if (expandBtn) expandBtn.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="10" y1="14" x2="21" y2="3"/><line x1="3" y1="21" x2="14" y2="10"/></svg>';
-    if (expandBtn) expandBtn.setAttribute('onclick', 'PageReader._collapsePane()');
-
-    // Show partner page badge in expanded panel header
-    var partner = State.get('partner');
-    var partnerPage = other === 'a' ? S.a.cur : S.b.cur;
-    var pInfo = document.getElementById('rp-' + other.replace('a','x').replace('b','a').replace('x','b') + '-info');
-    // Show partner info in expanded panel
-    var headerInfo = document.getElementById('rp-' + pane + '-info');
-    if (headerInfo && partner && S[other].tot > 0) {
-      headerInfo.innerHTML = '<span style="margin-right:6px">' + S[pane].cur + '/' + S[pane].tot + '</span>' +
-        '<span style="color:var(--rose);font-size:.6rem">' + (partner.emoji||'👤') + ' p.' + S[other].cur + '</span>';
-    }
-
-    // Re-render to fill full width
-    setTimeout(function() {
-      if (S[pane].type === 'pdf') _renderPDF(pane);
-    }, 50);
+    setTimeout(function() { if (S[pane].type === 'pdf') _renderPDF(pane); }, 60);
   }
 
-  function _collapsePane() {
-    _expanded = null;
-    var panelA  = document.getElementById('reader-panel-a');
-    var panelB  = document.getElementById('reader-panel-b');
-    var divider = document.getElementById('reader-divider');
-    if (panelA) panelA.style.display = '';
-    if (panelB) panelB.style.display = '';
-    if (divider) divider.style.display = '';
+  function _exitFull() {
+    if (!_fullPane) return;
+    var dskSB = document.getElementById('desktop-sidebar');
+    var divider = document.getElementById('reader-div');
+    var otherPanel = document.getElementById('panel-' + (_fullPane==='a'?'b':'a'));
+    if (dskSB)     dskSB.style.display = '';
+    if (divider)   divider.style.display = '';
+    if (otherPanel)otherPanel.style.display = '';
+    _fullPane = null;
 
-    // Restore expand buttons
-    ['a','b'].forEach(function(p) {
-      var btn = document.querySelector('#reader-panel-' + p + ' .reader-expand-btn');
-      if (btn) {
-        btn.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>';
-        btn.setAttribute('onclick', 'PageReader._expand(\'' + p + '\')');
-      }
-      _updateInfo(p);
-      if (S[p].type === 'pdf') _renderPDF(p);
-    });
+    var fsBtn = document.getElementById('fs-btn');
+    if (fsBtn) fsBtn.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>';
+
+    setTimeout(function() { ['a','b'].forEach(function(p){ if(S[p].type==='pdf') _renderPDF(p); }); }, 60);
   }
 
-  // ── Drag & drop ────────────────────────────────────────────────────────────
+  // ── Drop ───────────────────────────────────────────────────────────────────
   function _setupDrop(pane) {
-    var wrap = document.getElementById('rp-' + pane);
+    var wrap = document.getElementById('canvas-wrap-' + pane);
     if (!wrap) return;
-    wrap.addEventListener('dragover',  function(e) { e.preventDefault(); wrap.style.outline='2px dashed var(--amber)'; });
-    wrap.addEventListener('dragleave', function()  { wrap.style.outline=''; });
-    wrap.addEventListener('drop',      function(e) { e.preventDefault(); wrap.style.outline=''; var f=e.dataTransfer.files[0]; if(f) _loadDoc(pane,null,f); });
+    wrap.addEventListener('dragover',  function(e){e.preventDefault();wrap.style.outline='2px dashed var(--amber)';});
+    wrap.addEventListener('dragleave', function(){wrap.style.outline='';});
+    wrap.addEventListener('drop',      function(e){e.preventDefault();wrap.style.outline='';var f=e.dataTransfer.files[0];if(f)_loadDoc(pane,null,f);});
   }
 
-  function _onFile(e, pane) {
-    var f = e.target.files[0];
-    if (f) _loadDoc(pane, null, f);
-  }
+  function _onFile(e, pane) { var f=e.target.files[0]; if(f) _loadDoc(pane,null,f); }
 
-  // ── Load document ──────────────────────────────────────────────────────────
+  // ── Load ───────────────────────────────────────────────────────────────────
   async function _loadDoc(pane, url, file) {
-    var ext = (file ? file.name : url || '').split('.').pop().toLowerCase();
-    if (ext === 'txt') return _loadTXT(pane, url, file);
-    return _loadPDF(pane, url, file);
+    var ext = (file?file.name:url||'').split('.').pop().toLowerCase();
+    if (ext==='txt') return _loadTXT(pane,url,file);
+    return _loadPDF(pane,url,file);
   }
 
   async function _loadPDF(pane, url, file) {
-    var wrap = document.getElementById('rp-' + pane);
+    var wrap = document.getElementById('canvas-wrap-' + pane);
     if (!wrap) return;
-    wrap.innerHTML = '<div class="rdz-loading"><div class="rdz-spinner"></div><div>Cargando PDF…</div></div>';
+    wrap.innerHTML = '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;height:100%;color:var(--muted);font-size:.8rem"><div class="rdz-spinner"></div>Cargando PDF…</div>';
     try {
       var src;
       if (file instanceof File) {
-        var buf = await new Promise(function(res, rej) {
-          var r = new FileReader(); r.onload = function() { res(r.result); }; r.onerror = rej; r.readAsArrayBuffer(file);
-        });
-        src = { data: buf };
+        var buf = await new Promise(function(res,rej){var r=new FileReader();r.onload=function(){res(r.result);};r.onerror=rej;r.readAsArrayBuffer(file);});
+        src = {data:buf};
+        S[pane].url = null; // local file, no URL
       } else {
-        var resp = await fetch(url);
-        var buf2 = await resp.arrayBuffer();
-        src = { data: buf2 };
+        var resp = await fetch(url); var buf2 = await resp.arrayBuffer(); src={data:buf2};
+        S[pane].url = url;
       }
       var pdf = await pdfjsLib.getDocument(src).promise;
-      S[pane].type = 'pdf'; S[pane].pdf = pdf; S[pane].tot = pdf.numPages;
-
-      // Restore saved page
+      S[pane].type='pdf'; S[pane].pdf=pdf; S[pane].tot=pdf.numPages;
       var saved = await _loadSavedPage(pane);
       S[pane].cur = saved || 1;
-
-      wrap.innerHTML = '<canvas class="reader-pdf-canvas" id="canvas-' + pane + '"></canvas>';
+      wrap.innerHTML = '<canvas id="cv-'+pane+'" style="display:block;max-width:100%;max-height:100%;object-fit:contain"></canvas>';
       await _renderPDF(pane);
-      _updateInfo(pane);
-      _updateProgressBars();
-      _showProgressWrap();
+      _afterLoad(pane);
     } catch(e) {
-      wrap.innerHTML = '<div style="padding:20px;text-align:center;color:var(--rose);font-size:.8rem">⚠️ ' + e.message + '<br><small style="color:var(--muted)">Funciona al subir directamente desde tu dispositivo</small></div>';
+      wrap.innerHTML = '<div style="padding:20px;text-align:center;color:var(--rose);font-size:.78rem">⚠️ '+e.message+'</div>';
     }
   }
 
   async function _loadTXT(pane, url, file) {
     try {
       var text;
-      if (file instanceof File) {
-        text = await new Promise(function(res,rej){var r=new FileReader();r.onload=function(){res(r.result);};r.onerror=rej;r.readAsText(file,'utf-8');});
-      } else {
-        text = await fetch(url).then(function(r){return r.text();});
-      }
-      var pages = [];
-      for (var i = 0; i < text.length; i += 1800) pages.push(text.slice(i, i+1800));
-      S[pane].type = 'txt'; S[pane].pages = pages; S[pane].tot = pages.length;
+      if (file instanceof File) { text = await new Promise(function(res,rej){var r=new FileReader();r.onload=function(){res(r.result);};r.onerror=rej;r.readAsText(file,'utf-8');}); }
+      else { text = await fetch(url).then(function(r){return r.text();}); }
+      var pages=[]; for(var i=0;i<text.length;i+=1800) pages.push(text.slice(i,i+1800));
+      S[pane].type='txt'; S[pane].pages=pages; S[pane].tot=pages.length;
       var saved = await _loadSavedPage(pane);
       S[pane].cur = saved || 1;
-      var wrap = document.getElementById('rp-' + pane);
-      if (wrap) wrap.innerHTML = '<div class="reader-txt" id="txt-' + pane + '"></div>';
+      var wrap = document.getElementById('canvas-wrap-' + pane);
+      if (wrap) wrap.innerHTML = '<div id="txt-'+pane+'" style="height:100%;overflow-y:auto;padding:20px;font-family:\'Cormorant Garamond\',serif;font-size:1.05rem;line-height:1.9;color:var(--text2);white-space:pre-wrap"></div>';
       _renderTXT(pane);
-      _updateInfo(pane);
-      _updateProgressBars();
-      _showProgressWrap();
+      _afterLoad(pane);
     } catch(e) {
-      var wrap2 = document.getElementById('rp-' + pane);
-      if (wrap2) wrap2.innerHTML = '<div style="padding:20px;color:var(--rose)">⚠️ ' + e.message + '</div>';
+      var w=document.getElementById('canvas-wrap-'+pane);
+      if(w) w.innerHTML='<div style="padding:20px;color:var(--rose)">⚠️ '+e.message+'</div>';
     }
   }
 
   async function _renderPDF(pane) {
-    var s = S[pane];
-    if (!s.pdf || s.rendering) return;
-    s.rendering = true;
-    var canvas = document.getElementById('canvas-' + pane);
-    var wrap   = document.getElementById('rp-' + pane);
-    if (!canvas || !wrap) { s.rendering = false; return; }
+    var s=S[pane]; if(!s.pdf||s.rendering)return; s.rendering=true;
+    var canvas=document.getElementById('cv-'+pane);
+    var wrap=document.getElementById('canvas-wrap-'+pane);
+    if(!canvas||!wrap){s.rendering=false;return;}
     try {
-      var page = await s.pdf.getPage(s.cur);
-      var W    = wrap.clientWidth - 2;
-      var vp0  = page.getViewport({ scale: 1 });
-      var vp   = page.getViewport({ scale: Math.max(W / vp0.width, 0.5) });
-      canvas.width = vp.width; canvas.height = vp.height;
-      canvas.style.width = '100%';
-      await page.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise;
-    } catch(e) { console.error('render', e); }
-    s.rendering = false;
+      var page=await s.pdf.getPage(s.cur);
+      var W=wrap.clientWidth, H=wrap.clientHeight;
+      var vp0=page.getViewport({scale:1});
+      // Fit to height primarily (so whole page visible), then constrain by width
+      var scaleH = H / vp0.height;
+      var scaleW = W / vp0.width;
+      var scale  = Math.min(scaleH, scaleW) * 0.97; // 3% margin
+      var vp=page.getViewport({scale:Math.max(scale,0.4)});
+      canvas.width=vp.width; canvas.height=vp.height;
+      canvas.style.maxWidth='100%'; canvas.style.maxHeight='100%';
+      // Center the canvas
+      canvas.style.display='block';
+      canvas.style.margin='auto';
+      canvas.style.position='absolute';
+      canvas.style.top='50%'; canvas.style.left='50%';
+      canvas.style.transform='translate(-50%,-50%)';
+      await page.render({canvasContext:canvas.getContext('2d'),viewport:vp}).promise;
+    } catch(e){console.error('render',e);}
+    s.rendering=false;
   }
 
   function _renderTXT(pane) {
-    var el = document.getElementById('txt-' + pane);
-    if (!el) return;
-    el.textContent = S[pane].pages[S[pane].cur - 1] || '';
+    var el=document.getElementById('txt-'+pane); if(!el)return;
+    el.textContent=S[pane].pages[S[pane].cur-1]||'';
+  }
+
+  function _afterLoad(pane) {
+    _updateInfo(pane);
+    _showProgBars();
+    _updateLinkedUI();
+    _showReadyBtn(pane);
+    // Show nav buttons for B when it has content
+    if (pane === 'b' && !_linked) {
+      ['prev-b','pg-b','next-b'].forEach(function(id){var el=document.getElementById(id);if(el)el.style.display='';});
+    }
   }
 
   function _updateInfo(pane) {
-    var s  = S[pane];
-    var el = document.getElementById('rp-' + pane + '-info');
-    var inp= document.getElementById('page-' + pane + '-input');
-    if (!el) return;
+    var s=S[pane];
+    var pg=document.getElementById('pg-'+pane);
+    var tot=document.getElementById('tot-'+pane);
+    if(pg)  {pg.value=s.cur; pg.max=s.tot||999;}
+    if(tot) tot.textContent = s.tot ? ('/ '+s.tot) : '';
 
-    // In expanded mode show partner page too
-    var partner     = State.get('partner');
-    var otherPane   = pane === 'a' ? 'b' : 'a';
-    if (_expanded === pane && partner && S[otherPane].tot > 0) {
-      el.innerHTML = '<span>' + s.cur + '/' + s.tot + '</span>' +
-        '<span style="margin-left:6px;color:var(--rose);font-size:.6rem">' + (partner.emoji||'👤') + ' p.' + S[otherPane].cur + '</span>';
-    } else {
-      el.textContent = s.tot ? (s.cur + '/' + s.tot) : '—/—';
+    // Update topbar my info
+    if(pane===_myPane) {
+      var el=document.getElementById('bar-my-info');
+      if(el) el.textContent = s.tot ? (s.cur+'/'+s.tot) : '—/—';
     }
-    if (inp) { inp.value = s.cur; inp.max = s.tot || 999; }
+    _updateProgressBars();
   }
 
-  function _showProgressWrap() {
-    var wrap = document.getElementById('reader-progress-wrap');
-    if (wrap) wrap.style.display = '';
-
-    // Set labels
-    var user    = State.get('profile');
-    var partner = State.get('partner');
-    var myLabel      = document.getElementById('prog-my-label');
-    var partnerLabel = document.getElementById('prog-partner-label');
-    if (myLabel && user)    myLabel.textContent    = (user.emoji||'😊') + ' ' + (user.display_name||'Tú').slice(0,8);
-    if (partnerLabel && partner) partnerLabel.textContent = (partner.emoji||'👤') + ' ' + (partner.display_name||'Pareja').slice(0,8);
+  function _showProgBars() {
+    var wrap=document.getElementById('reader-prog');
+    if(wrap) wrap.style.display='';
+    var user=State.get('profile');
+    var partner=State.get('partner');
+    var myLbl=document.getElementById('prog-my-lbl');
+    var ptLbl=document.getElementById('prog-partner-lbl');
+    if(myLbl&&user)    myLbl.textContent=(user.emoji||'😊')+' '+(user.display_name||'Tú').slice(0,8);
+    if(ptLbl&&partner) ptLbl.textContent=(partner.emoji||'👤')+' '+(partner.display_name||'Pareja').slice(0,8);
   }
 
   function _updateProgressBars() {
-    var myPct      = S[_myPane].tot > 0 ? Math.round((S[_myPane].cur / S[_myPane].tot) * 100) : 0;
-    var myBar      = document.getElementById('prog-my-bar');
-    var myPctEl    = document.getElementById('prog-my-pct');
-    if (myBar)   myBar.style.width   = myPct + '%';
-    if (myPctEl) myPctEl.textContent = myPct + '%';
+    var s=S[_myPane];
+    var pct=s.tot>0?Math.round(s.cur/s.tot*100):0;
+    var bar=document.getElementById('prog-my'); var el=document.getElementById('prog-my-pct');
+    if(bar) bar.style.width=pct+'%'; if(el) el.textContent=pct+'%';
   }
 
-  function _updatePartnerProgressBar(page, total) {
-    var pct        = total > 0 ? Math.round((page / total) * 100) : 0;
-    var partnerBar = document.getElementById('prog-partner-bar');
-    var partnerPct = document.getElementById('prog-partner-pct');
-    if (partnerBar) partnerBar.style.width   = pct + '%';
-    if (partnerPct) partnerPct.textContent   = pct + '%';
+  function _updatePartnerProg(page, total) {
+    var pct=total>0?Math.round(page/total*100):0;
+    var bar=document.getElementById('prog-partner'); var el=document.getElementById('prog-partner-pct');
+    if(bar) bar.style.width=pct+'%'; if(el) el.textContent=pct+'%';
+    var badge=document.getElementById('bar-partner-badge');
+    var pg=document.getElementById('bar-partner-page');
+    if(badge&&total>0){badge.style.display='';} if(pg) pg.textContent=page;
   }
 
   // ── Navigation ─────────────────────────────────────────────────────────────
-  var _linked = true;
-
   async function _go(pane, delta) {
-    var s = S[pane];
-    if (!s.tot) return;
-    var np = Math.max(1, Math.min(s.tot, s.cur + delta));
-    if (np === s.cur) return;
-    s.cur = np;
-    if (s.type === 'pdf') await _renderPDF(pane);
-    else _renderTXT(pane);
+    var s=S[pane]; if(!s.tot)return;
+    var np=Math.max(1,Math.min(s.tot,s.cur+delta));
+    if(np===s.cur)return;
+    s.cur=np;
+    if(s.type==='pdf') await _renderPDF(pane); else _renderTXT(pane);
     _updateInfo(pane);
-    _updateProgressBars();
     _saveProgress(pane);
     _broadcast();
+    // Reset ready flags on page change
+    _readyA=false; _readyB=false;
+    _showReadyBtn(pane);
+    var prBar=document.getElementById('partner-ready-bar');
+    if(prBar) prBar.style.display='none';
   }
 
   async function _goTo(pane, page) {
-    var s = S[pane];
-    if (!s.tot) return;
-    s.cur = Math.max(1, Math.min(s.tot, page));
-    if (s.type === 'pdf') await _renderPDF(pane);
-    else _renderTXT(pane);
+    var s=S[pane]; if(!s.tot)return;
+    s.cur=Math.max(1,Math.min(s.tot,page));
+    if(s.type==='pdf') await _renderPDF(pane); else _renderTXT(pane);
     _updateInfo(pane);
-    _updateProgressBars();
     _saveProgress(pane);
     _broadcast();
   }
 
+  function _updateLinkedUI() {
+    var btnL=document.getElementById('link-btn');
+    if(btnL){btnL.textContent=_linked?'🔗':'🔓';btnL.style.color=_linked?'var(--amber)':'var(--muted)';}
+    // Show B nav only when not linked and B has content
+    if(!_linked && S.b.tot>0) {
+      ['prev-b','pg-b','next-b'].forEach(function(id){var el=document.getElementById(id);if(el)el.style.display='';});
+    } else {
+      ['prev-b','pg-b','next-b'].forEach(function(id){var el=document.getElementById(id);if(el)el.style.display='none';});
+    }
+  }
+
   function _toggleLink() {
-    _linked = !_linked;
-    var btn = document.getElementById('link-btn');
-    if (btn) { btn.textContent = _linked ? '🔗' : '🔓'; btn.style.color = _linked ? 'var(--amber)' : 'var(--muted)'; }
-    if (window.toast) toast(_linked ? '🔗 Páginas enlazadas' : '🔓 Páginas independientes');
+    _linked=!_linked; _updateLinkedUI();
+    if(window.toast) toast(_linked?'🔗 Páginas enlazadas':'🔓 Páginas independientes');
+  }
+
+  // ── "Listo / Ready" button ─────────────────────────────────────────────────
+  function _showReadyBtn(pane) {
+    var s=S[pane]; if(!s.tot)return;
+    var btn=document.getElementById('ready-btn-'+pane);
+    if(btn) btn.style.display='';
+  }
+
+  async function _markReady(pane) {
+    var btn=document.getElementById('ready-btn-'+pane);
+    if(btn){btn.style.background='rgba(112,200,160,.3)';btn.textContent='✓✓';}
+    if(pane==='a') _readyA=true; else _readyB=true;
+    // Broadcast ready signal
+    var coupleId=AppAuth.currentCoupleId();
+    var userId=State.get('profile')?.id;
+    if(!coupleId||!userId) return;
+    try {
+      await DB.setSetting(coupleId,'reader_ready',JSON.stringify({by:userId,page:S[pane].cur,ts:Date.now()}));
+      if(_channel) _channel.send({type:'broadcast',event:'ready',payload:{by:userId,page:S[pane].cur}}).catch(function(){});
+    } catch {}
   }
 
   // ── Progress persistence ───────────────────────────────────────────────────
   async function _saveProgress(pane) {
-    if (!_book) return;
-    var coupleId = AppAuth.currentCoupleId();
-    var userId   = State.get('profile')?.id;
-    if (!coupleId || !userId) return;
-    var s   = S[pane];
-    var pct = s.tot > 0 ? Math.round((s.cur / s.tot) * 100) : 0;
-    var key = 'rp_' + _book.id + '_' + userId + '_' + pane;
+    if(!_book)return;
+    var coupleId=AppAuth.currentCoupleId(); var userId=State.get('profile')?.id;
+    if(!coupleId||!userId)return;
+    var s=S[pane]; var pct=s.tot>0?Math.round(s.cur/s.tot*100):0;
+    var key='rp_'+_book.id+'_'+userId+'_'+pane;
     try {
-      await DB.setSetting(coupleId, key, JSON.stringify({ page: s.cur, total: s.tot, pct }));
-      // Update book progress
-      if (pane === _myPane) {
-        await DB.update('books', { id: _book.id }, { progress_pct: pct }).catch(function(){});
-      }
-      // Update KM reading
-      if (typeof KM !== 'undefined') KM.addPage();
+      await DB.setSetting(coupleId,key,JSON.stringify({page:s.cur,total:s.tot,pct}));
+      if(pane===_myPane) DB.update('books',{id:_book.id},{progress_pct:pct}).catch(function(){});
+      if(typeof KM!=='undefined') KM.addPage();
     } catch {}
   }
 
   async function _loadSavedPage(pane) {
-    if (!_book) return null;
-    var coupleId = AppAuth.currentCoupleId();
-    var userId   = State.get('profile')?.id;
-    if (!coupleId || !userId) return null;
-    var key = 'rp_' + _book.id + '_' + userId + '_' + pane;
-    try {
-      var raw = await DB.getSetting(coupleId, key);
-      if (!raw) return null;
-      return JSON.parse(raw).page || null;
-    } catch { return null; }
+    if(!_book)return null;
+    var coupleId=AppAuth.currentCoupleId(); var userId=State.get('profile')?.id;
+    if(!coupleId||!userId)return null;
+    var key='rp_'+_book.id+'_'+userId+'_'+pane;
+    try { var raw=await DB.getSetting(coupleId,key); return raw?JSON.parse(raw).page:null; } catch{return null;}
   }
 
   async function _loadPartnerProgress() {
-    if (!_book) return;
-    var coupleId = AppAuth.currentCoupleId();
-    var partner  = State.get('partner');
-    if (!coupleId || !partner) return;
-    var otherPane = _myPane === 'a' ? 'b' : 'a';
-    var key = 'rp_' + _book.id + '_' + partner.user_id + '_' + otherPane;
+    if(!_book)return;
+    var coupleId=AppAuth.currentCoupleId(); var partner=State.get('partner');
+    if(!coupleId||!partner)return;
+    var key='rp_'+_book.id+'_'+partner.user_id+'_a';
     try {
-      var raw = await DB.getSetting(coupleId, key);
-      if (!raw) return;
-      var d = JSON.parse(raw);
-      _updatePartnerProgressBar(d.page || 1, d.total || 0);
-      _showSyncBar(partner, d.page || 1);
+      var raw=await DB.getSetting(coupleId,key);
+      if(!raw)return;
+      var d=JSON.parse(raw);
+      _updatePartnerProg(d.page||1,d.total||0);
     } catch {}
   }
 
-  // ── Realtime sync ──────────────────────────────────────────────────────────
-  async function _syncNow() {
-    var coupleId = AppAuth.currentCoupleId();
-    if (!coupleId) return;
-    var userId = State.get('profile')?.id;
-    try {
-      await DB.setSetting(coupleId, 'reader_sync', JSON.stringify({
-        bookId: _book?.id, bookTitle: _book?.title,
-        pageA: S.a.cur, totA: S.a.tot,
-        pageB: S.b.cur, totB: S.b.tot,
-        by: userId, ts: Date.now()
-      }));
-      if (window.toast) toast('🔄 Páginas sincronizadas');
-    } catch { if (window.toast) toast('⚠️ Error'); }
-  }
-
+  // ── Realtime ───────────────────────────────────────────────────────────────
   async function _broadcast() {
-    var coupleId = AppAuth.currentCoupleId();
-    if (!coupleId) return;
-    var userId = State.get('profile')?.id;
+    var coupleId=AppAuth.currentCoupleId(); if(!coupleId)return;
+    var userId=State.get('profile')?.id;
     try {
-      await DB.setSetting(coupleId, 'reader_sync', JSON.stringify({
-        bookId: _book?.id, bookTitle: _book?.title,
-        pageA: S.a.cur, totA: S.a.tot,
-        pageB: S.b.cur, totB: S.b.tot,
-        by: userId, ts: Date.now()
+      await DB.setSetting(coupleId,'reader_sync',JSON.stringify({
+        bookId:_book?.id,pageA:S.a.cur,totA:S.a.tot,by:userId,ts:Date.now()
       }));
+      if(_channel) _channel.send({type:'broadcast',event:'page',payload:{by:userId,page:S.a.cur,total:S.a.tot}}).catch(function(){});
     } catch {}
   }
 
-  function _showSyncBar(partner, page) {
-    var bar = document.getElementById('reader-sync-bar');
-    if (!bar || !partner) return;
-    bar.textContent = (partner.emoji||'👤') + ' ' + partner.display_name + ' está en pág. ' + page;
-    bar.style.display = 'block';
-    clearTimeout(bar._t);
-    bar._t = setTimeout(function() { if(bar) bar.style.display='none'; }, 5000);
+  async function _syncNow() {
+    await _broadcast();
+    if(window.toast) toast('🔄 Sincronizado');
   }
 
   function _initRealtime() {
-    var coupleId = AppAuth.currentCoupleId();
-    if (!coupleId) return;
+    var coupleId=AppAuth.currentCoupleId(); if(!coupleId)return;
     try {
-      _channel = DB.client().channel('reader-' + coupleId);
-      _channel.on('broadcast', { event: 'page' }, function(payload) {
-        var p = payload.payload;
-        var myId = State.get('profile')?.id;
-        if (!p || p.by === myId) return;
-        var partner = State.get('partner');
-        // Show partner position
-        if (p.page) {
-          _updatePartnerProgressBar(p.page, p.total || 0);
-          _showSyncBar(partner, p.page);
-          // Auto-follow if linked
-          if (_linked && S[_myPane].tot > 0 && p.total > 0) {
-            var ratio  = (p.page - 1) / Math.max(p.total - 1, 1);
-            var target = Math.round(1 + ratio * (S[_myPane].tot - 1));
-            if (target !== S[_myPane].cur) {
-              S[_myPane].cur = target;
-              if (S[_myPane].type === 'pdf') _renderPDF(_myPane);
-              else _renderTXT(_myPane);
-              _updateInfo(_myPane);
-              _updateProgressBars();
-            }
-          }
+      _channel=DB.client().channel('reader-'+coupleId);
+      _channel.on('broadcast',{event:'page'},function(msg){
+        var p=msg.payload; var myId=State.get('profile')?.id;
+        if(!p||p.by===myId)return;
+        _updatePartnerProg(p.page||1,p.total||0);
+        if(_linked&&S[_myPane].tot>0&&p.total>0){
+          var ratio=(p.page-1)/Math.max(p.total-1,1);
+          var target=Math.round(1+ratio*(S[_myPane].tot-1));
+          if(target!==S[_myPane].cur){S[_myPane].cur=target;if(S[_myPane].type==='pdf')_renderPDF(_myPane);else _renderTXT(_myPane);_updateInfo(_myPane);}
         }
+      });
+      _channel.on('broadcast',{event:'ready'},function(msg){
+        var p=msg.payload; var myId=State.get('profile')?.id;
+        if(!p||p.by===myId)return;
+        var partner=State.get('partner');
+        var prBar=document.getElementById('partner-ready-bar');
+        if(prBar){prBar.style.display='block';setTimeout(function(){if(prBar)prBar.style.display='none';},8000);}
       });
       _channel.subscribe();
     } catch {}
   }
 
-  function _startSyncPolling() {
-    if (_syncInt) clearInterval(_syncInt);
-    _syncInt = setInterval(async function() {
-      if (Router.current() !== 'reader') { clearInterval(_syncInt); return; }
-      var coupleId = AppAuth.currentCoupleId();
-      if (!coupleId) return;
+  function _startSync() {
+    if(_syncInt) clearInterval(_syncInt);
+    _syncInt=setInterval(async function(){
+      if(Router.current()!=='reader'){clearInterval(_syncInt);return;}
+      var coupleId=AppAuth.currentCoupleId(); if(!coupleId)return;
       try {
-        var raw = await DB.getSetting(coupleId, 'reader_sync');
-        if (!raw) return;
-        var sync = JSON.parse(raw);
-        var myId = State.get('profile')?.id;
-        if (sync.by === myId) return;
-        if (_book && sync.bookId !== _book.id) return;
-        var partner = State.get('partner');
-        var otherPage = sync.pageA || 1;
-        _updatePartnerProgressBar(otherPage, sync.totA || 0);
-        _showSyncBar(partner, otherPage);
+        var raw=await DB.getSetting(coupleId,'reader_sync');
+        if(!raw)return;
+        var sync=JSON.parse(raw); var myId=State.get('profile')?.id;
+        if(sync.by===myId)return;
+        _updatePartnerProg(sync.pageA||1,sync.totA||0);
+        // Check ready
+        var rr=await DB.getSetting(coupleId,'reader_ready');
+        if(rr){
+          var rd=JSON.parse(rr);
+          if(rd.by!==myId&&Date.now()-rd.ts<30000){
+            var prBar=document.getElementById('partner-ready-bar');
+            if(prBar) prBar.style.display='block';
+          }
+        }
       } catch {}
-    }, 5000);
+    },5000);
   }
 
-  return {
-    init, _go, _goTo, _toggleLink, _syncNow, _onFile,
-    _expand, _collapsePane
-  };
+  return {init,_go,_goTo,_toggleLink,_syncNow,_onFile,_toggleFull,_exitFull,_markReady};
 })();
 
 
@@ -4779,6 +5017,20 @@ const App = {
     initStars();
     Router.init(Utils.el('main-content'));
     Router.go('home');
+
+    // Show desktop sidebar toggle on desktop
+    var dskToggle = Utils.el('dsk-sb-toggle');
+    if (dskToggle && window.innerWidth >= 768) dskToggle.style.display = '';
+  },
+
+  _sidebarVisible: true,
+  toggleSidebar() {
+    this._sidebarVisible = !this._sidebarVisible;
+    var sb = Utils.el('desktop-sidebar');
+    if (!sb) return;
+    sb.style.display = this._sidebarVisible ? 'flex' : 'none';
+    var btn = Utils.el('dsk-sb-toggle');
+    if (btn) btn.querySelector('svg').style.opacity = this._sidebarVisible ? '1' : '0.5';
   },
 
   showAuth() {
@@ -5362,6 +5614,7 @@ if(typeof MusicPlayer!=="undefined")window.MusicPlayer=MusicPlayer;
 if(typeof Toast!=="undefined")window.Toast=Toast;
 if(typeof Modal!=="undefined")window.Modal=Modal;
 if(typeof Sidebar!=="undefined")window.Sidebar=Sidebar;
+if(typeof I18N!=="undefined")window.I18N=I18N;
 if(typeof PageHome!=="undefined")window.PageHome=PageHome;
 if(typeof PageChat!=="undefined")window.PageChat=PageChat;
 if(typeof PageDiary!=="undefined")window.PageDiary=PageDiary;
@@ -5385,11 +5638,7 @@ if(typeof toast!=="undefined")window.toast=toast;
 
 </script>
 <script>
-setInterval(function() {
-  var c = document.getElementById('paypal-container-WJDEG9WTHZ5KE');
-  if (!c || c.children.length > 0 || typeof paypal === 'undefined') return;
-  try { paypal.HostedButtons({ hostedButtonId:"WJDEG9WTHZ5KE" }).render("#paypal-container-WJDEG9WTHZ5KE"); } catch(e) {}
-}, 800);
+setInterval(function(){var c=document.getElementById("paypal-container-WJDEG9WTHZ5KE");if(!c||c.children.length>0||typeof paypal==="undefined")return;try{paypal.HostedButtons({hostedButtonId:"WJDEG9WTHZ5KE"}).render("#paypal-container-WJDEG9WTHZ5KE");}catch(e){}},800);
 </script>
 </body>
 </html>
