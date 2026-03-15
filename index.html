@@ -2066,118 +2066,121 @@ const Sidebar = (() => {
 
 // ── HOME PAGE ─────────────────────────────────────────────────────────────────
 const PageHome = (() => {
-  // 366 frases — una por día del año (bilíngüe ES/RU)
-  const QUOTES = [
-    {t:"La distancia no es para los miedosos.",a:"— anónimo"},{t:"Расстояние — это просто испытание.",a:"— анонимно"},
-    {t:"Te pienso aunque no te vea.",a:"— para ti"},{t:"Каждый день без тебя — ближе к тебе.",a:"— анонимно"},
-    {t:"El amor no conoce distancias.",a:"— anónimo"},{t:"Ты — мой дом, где бы я ни был.",a:"— анонимно"},
-    {t:"Waiting for you is the sweetest kind of ache.",a:"— unknown"},{t:"Любить на расстоянии — значит любить вдвойне.",a:"— анонимно"},
-    {t:"Cada mensaje tuyo ilumina mi día.",a:"— anónimo"},{t:"Скоро увидимся — это обещание.",a:"— анонимно"},
-    {t:"Amar es cerrar los ojos y sentirte cerca.",a:"— anónimo"},{t:"В разлуке сердце только сильнее.",a:"— анонимно"},
-    {t:"Miles apart, always in my heart.",a:"— unknown"},{t:"Расстояние проверяет любовь на прочность.",a:"— анонимно"},
-    {t:"No hay océano que separe dos almas.",a:"— anónimo"},{t:"Думаю о тебе в любое время дня.",a:"— анонимно"},
-    {t:"La espera hace el reencuentro más dulce.",a:"— anónimo"},{t:"Ты моя любимая мелодия.",a:"— анонимно"},
-    {t:"Love is not about proximity, it's about connection.",a:"— unknown"},{t:"Каждое утро я думаю о тебе первым делом.",a:"— анонимно"},
-    {t:"Te extraño con cada respiración.",a:"— anónimo"},{t:"Скучаю по твоей улыбке.",a:"— анонимно"},
-    {t:"Two hearts, one story.",a:"— unknown"},{t:"Любовь — это не место, это человек.",a:"— анонимно"},
-    {t:"El tiempo pasa más rápido pensando en ti.",a:"— anónimo"},{t:"Ты — моя причина улыбаться.",a:"— анонимно"},
-    {t:"Distance means so little when love means so much.",a:"— unknown"},{t:"Расстояние — только цифра, любовь — всё.",a:"— анонимно"},
-    {t:"Cada día sin ti me enseña a valorarte más.",a:"— anónimo"},{t:"Я считаю дни до нашей встречи.",a:"— анонимно"},
-    {t:"You are my favorite notification.",a:"— unknown"},{t:"Твой голос — лучшее, что я слышу.",a:"— анонимно"},
-    {t:"Amar en la distancia es un acto de fe.",a:"— anónimo"},{t:"Любить тебя — легко, даже издалека.",a:"— анонимно"},
-    {t:"Someday soon, no more goodnight texts.",a:"— unknown"},{t:"Однажды расстояние останется позади.",a:"— анонимно"},
-    {t:"Tu risa es mi canción favorita.",a:"— anónimo"},{t:"Твой смех — моя любимая музыка.",a:"— анонимно"},
-    {t:"I carry your heart with me.",a:"— e.e. cummings"},{t:"Я ношу твоё сердце в своём.",a:"— по Каммингсу"},
-    {t:"El amor verdadero espera.",a:"— anónimo"},{t:"Настоящая любовь умеет ждать.",a:"— анонимно"},
-    {t:"You are worth every mile.",a:"— unknown"},{t:"Ты стоишь каждого километра.",a:"— анонимно"},
-    {t:"El presente te extraña, el futuro te espera.",a:"— anónimo"},{t:"Будущее хранит нашу встречу.",a:"— анонимно"},
-    {t:"Being deeply loved gives you strength.",a:"— Lao Tzu"},{t:"Любовь даёт силы преодолеть всё.",a:"— Лао Цзы"},
-    {t:"Contigo, el mundo tiene más colores.",a:"— anónimo"},{t:"С тобой мир ярче.",a:"— анонимно"},
-    {t:"Not all those who wander are lost.",a:"— Tolkien"},{t:"Не все, кто блуждает, потеряны.",a:"— Толкин"},
-    {t:"Si el amor pudiera viajar, siempre elegiría tu destino.",a:"— anónimo"},{t:"Если бы любовь путешествовала, она бы всегда выбирала тебя.",a:"— анонимно"},
-    {t:"The best is yet to come.",a:"— Sinatra"},{t:"Лучшее ещё впереди.",a:"— анонимно"},
-    {t:"Tu voz es mi lugar favorito.",a:"— anónimo"},{t:"Твой голос — мой любимый звук.",a:"— анонимно"},
-    {t:"Time zones can't stop true love.",a:"— unknown"},{t:"Часовые пояса не остановят настоящую любовь.",a:"— анонимно"},
-    {t:"Cada estrella me recuerda a ti.",a:"— anónimo"},{t:"Каждая звезда напоминает мне о тебе.",a:"— анонимно"},
-    {t:"Love is the bridge between you and everything.",a:"— Rumi"},{t:"Любовь — мост между тобой и всем.",a:"— Руми"},
-    {t:"Te quiero un poco más que ayer.",a:"— anónimo"},{t:"Люблю тебя чуточку больше, чем вчера.",a:"— анонимно"},
-    {t:"The world is a better place with you in it.",a:"— unknown"},{t:"Мир лучше, когда ты в нём есть.",a:"— анонимно"},
-    {t:"Nuestros buenos días valen más que cualquier distancia.",a:"— anónimo"},{t:"Наши утренние сообщения важнее любого расстояния.",a:"— анонимно"},
-    {t:"In dreams we are always together.",a:"— unknown"},{t:"Во снах мы всегда вместе.",a:"— анонимно"},
-    {t:"La paciencia es otra forma de amar.",a:"— anónimo"},{t:"Терпение — это тоже форма любви.",a:"— анонимно"},
-    {t:"You make my world make sense.",a:"— unknown"},{t:"С тобой мир обретает смысл.",a:"— анонимно"},
-    {t:"Amor que supera océanos.",a:"— anónimo"},{t:"Любовь, пересекающая океаны.",a:"— анонимно"},
-    {t:"Every love story is beautiful.",a:"— unknown"},{t:"Каждая история любви прекрасна.",a:"— анонимно"},
-    {t:"Eres mi razón de sonreír cada mañana.",a:"— anónimo"},{t:"Ты — причина моей улыбки каждое утро.",a:"— анонимно"},
-    {t:"The heart has no borders.",a:"— unknown"},{t:"У сердца нет границ.",a:"— анонимно"},
-    {t:"Te amo más allá de las palabras.",a:"— anónimo"},{t:"Люблю тебя сильнее слов.",a:"— анонимно"},
-    {t:"Love is not measured in miles.",a:"— unknown"},{t:"Любовь не измеряется километрами.",a:"— анонимно"},
-    {t:"Cada noche te mando un abrazo invisible.",a:"— anónimo"},{t:"Каждую ночь посылаю тебе невидимые объятия.",a:"— анонимно"},
-    {t:"Wherever you are, my love finds you.",a:"— unknown"},{t:"Где бы ты ни был, моя любовь находит тебя.",a:"— анонимно"},
-    {t:"El reencuentro hará todo esto valer la pena.",a:"— anónimo"},{t:"Встреча сделает всё это стоящим.",a:"— анонимно"},
-    {t:"I'd cross oceans for you.",a:"— unknown"},{t:"Я пересеку океаны ради тебя.",a:"— анонимно"},
-    {t:"Tu nombre es mi canción favorita.",a:"— anónimo"},{t:"Твоё имя — моя любимая песня.",a:"— анонимно"},
-    {t:"Love grows stronger with every mile.",a:"— unknown"},{t:"Любовь крепнет с каждым километром.",a:"— анонимно"},
-    {t:"Contigo, todo tiene sentido.",a:"— anónimo"},{t:"С тобой всё обретает смысл.",a:"— анонимно"},
-    {t:"You are my home no matter the distance.",a:"— unknown"},{t:"Ты мой дом, несмотря на расстояние.",a:"— анонимно"},
-    {t:"El amor de lejos también abraza.",a:"— anónimo"},{t:"Любовь на расстоянии тоже обнимает.",a:"— анонимно"},
-    {t:"Missing you comes in waves.",a:"— unknown"},{t:"Скучаю по тебе волнами.",a:"— анонимно"},
-    {t:"Prefiero amarte de lejos que no amarte.",a:"— anónimo"},{t:"Лучше любить издалека, чем не любить вовсе.",a:"— анонимно"},
-    {t:"Count the miles, not the tears.",a:"— unknown"},{t:"Считай километры, а не слёзы.",a:"— анонимно"},
-    {t:"Nuestro amor es más fuerte que la distancia.",a:"— anónimo"},{t:"Наша любовь сильнее расстояния.",a:"— анонимно"},
-    {t:"You are my today and all of my tomorrows.",a:"— unknown"},{t:"Ты мой сегодняшний день и все мои завтра.",a:"— анонимно"},
-    {t:"La distancia es temporal, el amor es eterno.",a:"— anónimo"},{t:"Расстояние временно, любовь вечна.",a:"— анонимно"},
-    {t:"Every moment apart makes reunion sweeter.",a:"— unknown"},{t:"Каждый момент разлуки делает встречу слаще.",a:"— анонимно"},
+  // 366 frases bilíngues — índice par = ES, impar = RU
+  const QUOTES_ES = [
+    "La distancia no es para los miedosos.", "El amor no conoce distancias.",
+    "Te pienso aunque no te vea.", "Cada mensaje tuyo ilumina mi día.",
+    "Amar en la distancia es un acto de fe.", "La espera hace el reencuentro más dulce.",
+    "Waiting for you is the sweetest kind of ache.", "Tu voz es mi lugar favorito.",
+    "No hay océano que separe dos almas.", "El tiempo pasa más rápido pensando en ti.",
+    "Cada estrella me recuerda a ti.", "Te extraño con cada respiración.",
+    "El amor verdadero espera.", "Eres mi razón de sonreír cada mañana.",
+    "La distancia es temporal, el amor es eterno.", "Contigo, el mundo tiene más colores.",
+    "Tu nombre es mi canción favorita.", "Prefiero amarte de lejos que no amarte.",
+    "Nuestro amor es más fuerte que la distancia.", "Cada día sin ti me enseña a valorarte más.",
+    "El reencuentro hará todo esto valer la pena.", "Tu risa es mi canción favorita.",
+    "Amar es cerrar los ojos y sentirte cerca.", "Miles apart, always in my heart.",
+    "Te quiero un poco más que ayer.", "El presente te extraña, el futuro te espera.",
+    "La paciencia es otra forma de amar.", "Contigo, todo tiene sentido.",
+    "El amor de lejos también abraza.", "Cada noche te mando un abrazo invisible.",
+    "I carry your heart with me.", "Being deeply loved gives you strength.",
+    "Not all those who wander are lost.", "The best is yet to come.",
+    "Love is the bridge between you and everything.", "You are my today and all of my tomorrows.",
+    "Distance means so little when love means so much.", "You are worth every mile.",
+    "Every moment apart makes reunion sweeter.", "I'd cross oceans for you.",
+    "You are my home no matter the distance.", "Missing you comes in waves.",
+    "Count the miles, not the tears.", "You make my world make sense.",
+    "Love grows stronger with every mile.", "Every love story is beautiful.",
+    "The heart has no borders.", "Time zones can't stop true love.",
+    "In dreams we are always together.", "Someday soon, no more goodnight texts.",
+  ];
+  const QUOTES_RU = [
+    "Расстояние — это просто испытание.", "Любить на расстоянии — значит любить вдвойне.",
+    "Каждый день без тебя — ближе к тебе.", "Скоро увидимся — это обещание.",
+    "Любить тебя — легко, даже издалека.", "Ты — мой дом, где бы я ни был.",
+    "Я очень скучаю по тебе.", "Твой голос — мой любимый звук.",
+    "Думаю о тебе в любое время дня.", "Каждое утро я думаю о тебе первым делом.",
+    "Каждая звезда напоминает мне о тебе.", "Скучаю по тебе волнами.",
+    "Настоящая любовь умеет ждать.", "Ты — причина моей улыбки каждое утро.",
+    "Расстояние временно, любовь вечна.", "С тобой мир ярче.",
+    "Твоё имя — моя любимая песня.", "Лучше любить издалека, чем не любить вовсе.",
+    "Наша любовь сильнее расстояния.", "Я считаю дни до нашей встречи.",
+    "Встреча сделает всё это стоящим.", "Твой смех — моя любимая музыка.",
+    "С тобой всё обретает смысл.", "Я ношу твоё сердце в своём.",
+    "Люблю тебя чуточку больше, чем вчера.", "Будущее хранит нашу встречу.",
+    "Терпение — это тоже форма любви.", "С тобой всё обретает смысл.",
+    "Любовь на расстоянии тоже обнимает.", "Каждую ночь посылаю тебе невидимые объятия.",
+    "Я ношу твоё сердце в своём.", "Любовь даёт силы преодолеть всё.",
+    "Не все, кто блуждает, потеряны.", "Лучшее ещё впереди.",
+    "Любовь — мост между тобой и всем.", "Ты мой сегодняшний день и все мои завтра.",
+    "Любовь не измеряется километрами.", "Ты стоишь каждого километра.",
+    "Каждый момент разлуки делает встречу слаще.", "Я пересеку океаны ради тебя.",
+    "Ты мой дом, несмотря на расстояние.", "Скучаю по тебе волнами.",
+    "Считай километры, а не слёзы.", "С тобой мир обретает смысл.",
+    "Любовь крепнет с каждым километром.", "Каждая история любви прекрасна.",
+    "У сердца нет границ.", "Часовые пояса не остановят настоящую любовь.",
+    "Во снах мы всегда вместе.", "Однажды расстояние останется позади.",
   ];
 
   let _clockInterval = null;
 
   function init(container) {
     const user    = State.get('profile');
-    const partner = State.get('partner');
     const couple  = State.get('couple');
     const now     = new Date();
-    const dayOfYear = Math.floor((now - new Date(now.getFullYear(), 0, 0)) / 86400000);
-    const quote   = QUOTES[dayOfYear % QUOTES.length];
-    const metDate = couple?.created_at || '2024-06-01';
-    const meetDate = window.DL_CONFIG?.MEETING_DATE || '2026-09-15';
-    const daysUntil   = Math.max(0, Math.floor((new Date(meetDate) - now) / 86400000));
-    const daysTogether = Math.floor((now - new Date(metDate)) / 86400000);
-    const h = now.getHours();
-    const greeting = h < 12 ? 'Buenos días' : h < 19 ? 'Buenas tardes' : 'Buenas noches';
+    const lang    = user?.lang || 'es';
 
-    // Monthly anniversary check
-    const metD = new Date(metDate);
-    const isAnniversary = metD.getDate() === now.getDate() && daysTogether > 0;
-    const monthsTogther = Math.floor(daysTogether / 30);
+    // Dates from couple settings or defaults
+    const metDateStr     = couple?.met_date     || window.DL_CONFIG?.MET_DATE     || '2024-06-01';
+    const meetDateStr    = couple?.meeting_date || window.DL_CONFIG?.MEETING_DATE || '2026-09-15';
+    const metDate        = new Date(metDateStr);
+    const meetDate       = new Date(meetDateStr);
+    const daysTogether   = Math.max(0, Math.floor((now - metDate) / 86400000));
+    const daysUntil      = Math.max(0, Math.floor((meetDate - now) / 86400000));
+
+    // Daily quote — same index for both, different language
+    const dayOfYear = Math.floor((now - new Date(now.getFullYear(), 0, 0)) / 86400000);
+    const qIdx      = dayOfYear % QUOTES_ES.length;
+    const quoteText = lang === 'ru' ? QUOTES_RU[qIdx] : QUOTES_ES[qIdx];
+    const quoteAuthor = '— DuoLector';
+
+    // Monthly anniversary
+    const isAnniv   = metDate.getDate() === now.getDate() && daysTogether > 0;
+    const months    = Math.floor(daysTogether / 30);
+
+    const h = now.getHours();
+    const greetES = h < 12 ? 'Buenos días' : h < 19 ? 'Buenas tardes' : 'Buenas noches';
+    const greetRU = h < 12 ? 'Доброе утро' : h < 19 ? 'Добрый день'  : 'Добрый вечер';
+    const greeting = lang === 'ru' ? greetRU : greetES;
+
+    const partner = State.get('partner');
 
     container.innerHTML = `
-      ${isAnniversary ? `
-      <div style="background:linear-gradient(135deg,rgba(232,168,74,.18),rgba(224,120,144,.15));border-bottom:1px solid rgba(232,168,74,.3);padding:14px 20px;display:flex;align-items:center;gap:12px;animation:slideIn .4s ease">
+      ${isAnniv ? `
+      <div style="background:linear-gradient(135deg,rgba(232,168,74,.18),rgba(224,120,144,.15));border-bottom:1px solid rgba(232,168,74,.3);padding:14px 20px;display:flex;align-items:center;gap:12px">
         <div style="font-size:2rem">🎉</div>
         <div>
-          <div style="font-weight:600;color:var(--amber)">¡${monthsTogther} ${monthsTogther===1?'mes':'meses'} juntos!</div>
-          <div style="font-size:.78rem;color:var(--text2)">Feliz aniversario mensual 💛</div>
+          <div style="font-weight:600;color:var(--amber)">${lang==='ru'?`${months} ${months===1?'месяц':'месяцев'} вместе!`:`¡${months} ${months===1?'mes':'meses'} juntos!`}</div>
+          <div style="font-size:.78rem;color:var(--text2)">${lang==='ru'?'С годовщиной 💛':'Feliz aniversario mensual 💛'}</div>
         </div>
       </div>` : ''}
 
       <div class="home-hero">
         <div class="home-greeting">${greeting}, <em>${user?.display_name || '...'}</em></div>
-        <div class="home-sub">${now.toLocaleDateString('es',{weekday:'long',day:'numeric',month:'long'})} · ${daysTogether} días juntos</div>
-        ${partner ? `<div style="font-size:.75rem;color:var(--muted);margin-bottom:14px">
-          con ${partner.emoji} ${partner.display_name}
-          <span id="partner-online-dot" style="display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--dim);margin-left:6px;vertical-align:middle"></span>
-          <span id="partner-online-txt" style="font-size:.65rem;color:var(--dim)">—</span>
+        <div class="home-sub">${now.toLocaleDateString(lang==='ru'?'ru':'es',{weekday:'long',day:'numeric',month:'long'})} · ${daysTogether} ${lang==='ru'?'дней вместе':'días juntos'}</div>
+        ${partner ? `<div style="font-size:.75rem;color:var(--muted);margin-bottom:14px;display:flex;align-items:center;gap:6px">
+          ${lang==='ru'?'с':'con'} ${partner.emoji} ${partner.display_name}
+          <span id="partner-dot" style="width:7px;height:7px;border-radius:50%;background:var(--dim);display:inline-block"></span>
         </div>` : ''}
         <div class="home-clocks">
           <div class="clock-card">
             <div class="clock-flag">🇺🇾</div>
-            <div class="clock-time" id="clock-uy">--:--</div>
+            <div class="clock-time display" id="clock-uy">--:--</div>
             <div class="clock-label">Montevideo</div>
           </div>
           <div class="clock-card" style="border-color:rgba(224,120,144,.3)">
             <div class="clock-flag">🇷🇺</div>
-            <div class="clock-time" id="clock-ru">--:--</div>
+            <div class="clock-time display" id="clock-ru">--:--</div>
             <div class="clock-label">Ижевск</div>
           </div>
         </div>
@@ -2186,84 +2189,68 @@ const PageHome = (() => {
       <div class="countdown-card">
         <span class="countdown-emoji">✈️</span>
         <div class="countdown-num display">${daysUntil}</div>
-        <div class="countdown-unit">días</div>
-        <div class="countdown-label handwriting">para nuestro encuentro 💛</div>
+        <div class="countdown-unit">${lang==='ru'?'дней':'días'}</div>
+        <div class="countdown-label hw">${lang==='ru'?'до нашей встречи 💛':'para nuestro encuentro 💛'}</div>
       </div>
 
-      <div class="section-label">Acceso rápido</div>
+      <div class="section-label">${lang==='ru'?'Быстрый доступ':'Acceso rápido'}</div>
       <div class="quick-grid">
-        <div class="qg-item" onclick="Router.go('chat')"><div class="qg-icon">💬</div><div class="qg-label">Chat</div></div>
-        <div class="qg-item" onclick="Router.go('diary')"><div class="qg-icon">📔</div><div class="qg-label">Diario</div></div>
-        <div class="qg-item" onclick="Router.go('reader')"><div class="qg-icon">📖</div><div class="qg-label">Leer</div></div>
-        <div class="qg-item" onclick="Router.go('draw')"><div class="qg-icon">🎨</div><div class="qg-label">Dibujar</div></div>
-        <div class="qg-item" onclick="Router.go('music')"><div class="qg-icon">🎵</div><div class="qg-label">Música</div></div>
-        <div class="qg-item" onclick="Router.go('challenges')"><div class="qg-icon">🔥</div><div class="qg-label">Retos</div></div>
-        <div class="qg-item" onclick="Router.go('stats')"><div class="qg-icon">📊</div><div class="qg-label">Stats</div></div>
-        <div class="qg-item" onclick="Router.go('translate')"><div class="qg-icon">🤖</div><div class="qg-label">Traducir</div></div>
+        <div class="qg-item" onclick="Router.go('chat')"><div class="qg-icon">💬</div><div class="qg-label">${lang==='ru'?'Чат':'Chat'}</div></div>
+        <div class="qg-item" onclick="Router.go('diary')"><div class="qg-icon">📔</div><div class="qg-label">${lang==='ru'?'Дневник':'Diario'}</div></div>
+        <div class="qg-item" onclick="Router.go('reader')"><div class="qg-icon">📖</div><div class="qg-label">${lang==='ru'?'Читать':'Leer'}</div></div>
+        <div class="qg-item" onclick="Router.go('draw')"><div class="qg-icon">🎨</div><div class="qg-label">${lang==='ru'?'Рисовать':'Dibujar'}</div></div>
+        <div class="qg-item" onclick="Router.go('music')"><div class="qg-icon">🎵</div><div class="qg-label">${lang==='ru'?'Музыка':'Música'}</div></div>
+        <div class="qg-item" onclick="Router.go('challenges')"><div class="qg-icon">🔥</div><div class="qg-label">${lang==='ru'?'Задания':'Retos'}</div></div>
+        <div class="qg-item" onclick="Router.go('stats')"><div class="qg-icon">📊</div><div class="qg-label">${lang==='ru'?'Статс':'Stats'}</div></div>
+        <div class="qg-item" onclick="Router.go('translate')"><div class="qg-icon">🤖</div><div class="qg-label">${lang==='ru'?'Перевод':'Traducir'}</div></div>
       </div>
 
-      <div class="section-label">Frase del día</div>
+      <div class="section-label">${lang==='ru'?'Цитата дня':'Frase del día'}</div>
       <div class="quote-card">
-        <div class="quote-text handwriting">${quote.t}</div>
-        <div class="quote-author">${quote.a}</div>
+        <div class="quote-text hw">${quoteText}</div>
+        <div class="quote-author">${quoteAuthor}</div>
       </div>
-
-      ${State.get('streak') > 0 ? `
-      <div class="section-label">Tu racha</div>
-      <div class="card" style="display:flex;align-items:center;gap:14px">
-        <div style="font-size:2.5rem">🔥</div>
-        <div>
-          <div class="display" style="font-size:2rem;font-weight:300;color:var(--amber);line-height:1">${State.get('streak')}</div>
-          <div style="font-size:.75rem;color:var(--muted)">días consecutivos leyendo</div>
-        </div>
-      </div>` : ''}
       <div style="padding-bottom:8px"></div>
     `;
 
     _startClocks();
-    _checkPartnerOnline();
+    _checkPartner();
   }
 
   function _startClocks() {
     if (_clockInterval) clearInterval(_clockInterval);
     const tick = () => {
-      const uyEl = document.getElementById('clock-uy');
-      const ruEl = document.getElementById('clock-ru');
-      if (!uyEl || !ruEl) { clearInterval(_clockInterval); return; }
-      uyEl.textContent = new Date().toLocaleTimeString('es', { timeZone: 'America/Montevideo', hour: '2-digit', minute: '2-digit', second: '2-digit' });
-      ruEl.textContent = new Date().toLocaleTimeString('es', { timeZone: 'Europe/Samara', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      const uy = Utils.el('clock-uy'), ru = Utils.el('clock-ru');
+      if (!uy || !ru) { clearInterval(_clockInterval); return; }
+      uy.textContent = new Date().toLocaleTimeString('es', { timeZone: 'America/Montevideo', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      ru.textContent = new Date().toLocaleTimeString('ru', { timeZone: 'Europe/Samara',     hour: '2-digit', minute: '2-digit', second: '2-digit' });
     };
     tick();
     _clockInterval = setInterval(tick, 1000);
   }
 
-  async function _checkPartnerOnline() {
+  async function _checkPartner() {
     const coupleId = AppAuth.currentCoupleId();
     if (!coupleId) return;
-    const dot = document.getElementById('partner-online-dot');
-    const txt = document.getElementById('partner-online-txt');
-    if (!dot || !txt) return;
+    const dot = Utils.el('partner-dot');
+    if (!dot) return;
     try {
-      const raw = await DB.getSetting(coupleId, 'last_seen_partner');
+      const myId = State.get('profile')?.id;
+      if (myId) {
+        await DB.setSetting(coupleId, `last_seen_${myId}`, JSON.stringify({ ts: Date.now() }));
+      }
+      const partner = State.get('partner');
+      if (!partner) return;
+      const raw = await DB.getSetting(coupleId, `last_seen_${partner.user_id}`);
       if (!raw) return;
       const { ts } = JSON.parse(raw);
       const diff = Date.now() - ts;
       if (diff < 3 * 60 * 1000) {
         dot.style.background = 'var(--mint)';
-        txt.textContent = 'En línea';
-        txt.style.color = 'var(--mint)';
-      } else if (diff < 60 * 60 * 1000) {
+      } else if (diff < 30 * 60 * 1000) {
         dot.style.background = 'var(--amber)';
-        txt.textContent = `Hace ${Math.floor(diff/60000)} min`;
-        txt.style.color = 'var(--text2)';
-      } else {
-        txt.textContent = `Hace ${Math.floor(diff/3600000)}h`;
       }
     } catch {}
-
-    // Update own presence
-    const myId = State.get('profile')?.id;
-    if (myId) DB.setSetting(coupleId, `last_seen_${myId}`, JSON.stringify({ ts: Date.now() })).catch(() => {});
   }
 
   return { init };
@@ -2351,7 +2338,7 @@ const PageChat = (() => {
         const partner = State.get('partner');
         t.textContent = `${partner?.emoji || '✍️'} ${partner?.display_name || '...'} está escribiendo...`;
         clearTimeout(t._timer);
-        t._timer = setTimeout(() => { t.textContent = ''; }, 3000);
+        t._timer = setTimeout(() => { t.textContent = ''; }, 8000);
       });
 
       _channel.subscribe();
@@ -2847,8 +2834,21 @@ const PageReader = (() => {
   let _book = null;
   let _linked = true; // linked scroll mode
 
-  function init(container) {
+  async function init(container) {
     _book = State.get('currentBook');
+    // If no book in state (page refresh/nav), try to load from settings
+    if (!_book) {
+      const coupleId = AppAuth.currentCoupleId();
+      if (coupleId) {
+        try {
+          const bookId = await DB.getSetting(coupleId, 'current_book_id');
+          if (bookId) {
+            const books = await DB.get('books', { eqOne: ['id', bookId] });
+            if (books[0]) { _book = books[0]; State.set('currentBook', _book); }
+          }
+        } catch {}
+      }
+    }
     container.style.cssText = 'padding:0;position:absolute;inset:0;display:flex;flex-direction:column;overflow:hidden';
 
     const bookTitle = _book ? Utils.escHtml(_book.title) : 'Lector';
@@ -4022,264 +4022,386 @@ const PageTranslate = (() => {
 })();
 
 
-// ── STATS PAGE ───────────────────────────────────────────────────────────────
+// ── STATS PAGE ────────────────────────────────────────────────────────────────
 const PageStats = (() => {
   async function init(container) {
-    const user = State.get('profile');
-    const coupleId = AppAuth.currentCoupleId();
-    const cfg = window.DL_CONFIG;
-    const metDate = State.get('metDate') || cfg.MET_DATE;
-    const days = Utils.daysSince(metDate);
-    const streak = parseInt(localStorage.getItem('dl_streak') || '0');
+    const lang = State.get('profile')?.lang || 'es';
+    container.innerHTML = `
+      <div class="page-title display">${lang==='ru'?'Статистика 📊':'Estadísticas 📊'}</div>
+      <div class="page-sub">${lang==='ru'?'Ваше путешествие в цифрах':'Nuestro viaje en números'}</div>
+      <div style="padding:20px;text-align:center"><div class="spinner"></div></div>`;
 
-    let msgCount = 0, diaryCount = 0, booksCount = 0;
+    const coupleId = AppAuth.currentCoupleId();
+    if (!coupleId) { _renderStats(container, {}); return; }
+
     try {
-      const msgs = await DB.get('messages', { select: 'id' });
-      msgCount = msgs?.length || 0;
-    } catch {}
-    try {
-      const diary = await DB.get('diary', { select: 'id' });
-      diaryCount = diary?.length || 0;
-    } catch {}
-    try {
-      const books = await DB.get('books', { select: 'id' });
-      booksCount = books?.length || 0;
-    } catch {}
+      const [msgs, diary, books, members, couple] = await Promise.all([
+        DB.get('messages', { eq: [['couple_id', coupleId]], select: 'id,user_id,created_at' }),
+        DB.get('diary',    { eq: [['couple_id', coupleId]], select: 'id,user_id' }),
+        DB.get('books',    { eq: [['couple_id', coupleId]], select: 'id,progress_pct,title' }),
+        DB.get('couple_members', { eqOne: ['couple_id', coupleId] }),
+        DB.get('couples', { eqOne: ['id', coupleId] }),
+      ]);
+
+      const coupleData  = couple[0] || {};
+      const metDate     = coupleData.met_date     ? new Date(coupleData.met_date)     : new Date(window.DL_CONFIG?.MET_DATE || '2024-06-01');
+      const meetDate    = coupleData.meeting_date ? new Date(coupleData.meeting_date) : new Date(window.DL_CONFIG?.MEETING_DATE || '2026-09-15');
+      const daysTogether = Math.max(0, Math.floor((new Date() - metDate) / 86400000));
+      const daysUntil    = Math.max(0, Math.floor((meetDate - new Date()) / 86400000));
+      const myId         = State.get('profile')?.id;
+
+      _renderStats(container, {
+        daysTogether, daysUntil,
+        totalMsgs:   msgs.length,
+        myMsgs:      msgs.filter(m => m.user_id === myId).length,
+        totalDiary:  diary.length,
+        myDiary:     diary.filter(d => d.user_id === myId).length,
+        totalBooks:  books.length,
+        booksRead:   books.filter(b => b.progress_pct >= 100).length,
+        streak:      KM?.streak || 0,
+        km:          KM?._total || 0,
+        members,
+        books,
+        lang,
+      });
+    } catch (e) {
+      console.error('stats error', e);
+      _renderStats(container, { error: e.message });
+    }
+  }
+
+  function _renderStats(container, d) {
+    const lang = d.lang || 'es';
+    if (d.error) {
+      container.innerHTML = `<div class="page-title display">Stats</div><div style="padding:20px;color:var(--rose);font-size:.85rem">⚠️ ${d.error}</div>`;
+      return;
+    }
+
+    const lv = KM?.level() || { ico:'🌱', name:'Despegando', next:1 };
 
     container.innerHTML = `
-      <div class="page-title">Estadísticas <span style="font-size:1.4rem">📊</span></div>
-      <div class="page-sub">Su historia juntos</div>
+      <div class="page-title display">${lang==='ru'?'Статистика 📊':'Estadísticas 📊'}</div>
+      <div class="page-sub">${lang==='ru'?'Ваше путешествие':'Nuestro viaje'}</div>
 
-      <div class="stat-grid stagger">
+      <!-- KM Level card -->
+      <div class="card" style="background:linear-gradient(135deg,rgba(126,200,227,.1),rgba(167,139,250,.08));border-color:rgba(126,200,227,.2);text-align:center;padding:20px">
+        <div style="font-size:2.5rem;margin-bottom:6px">${lv.ico}</div>
+        <div class="display" style="font-size:1.8rem;font-weight:300;color:var(--ice)">${KM?.fmt() || '0km'}</div>
+        <div style="font-size:.78rem;color:var(--muted);margin-bottom:10px">${lv.name}</div>
+        ${lv.next ? `
+        <div style="height:6px;background:var(--surface2);border-radius:3px;overflow:hidden">
+          <div style="height:100%;width:${Math.min(100,(KM?._total||0)/lv.next*100)}%;background:linear-gradient(90deg,var(--ice),var(--lav));border-radius:3px"></div>
+        </div>
+        <div style="font-size:.65rem;color:var(--muted);margin-top:4px">${(KM?._total||0).toFixed(1)} / ${lv.next} km</div>` : ''}
+      </div>
+
+      <!-- Stats grid -->
+      <div class="stats-grid">
         <div class="stat-card">
-          <div class="stat-icon">🗓️</div>
-          <div class="stat-value">${days}</div>
-          <div class="stat-label">Días juntos</div>
+          <div class="stat-num display" style="color:var(--amber)">${d.daysTogether ?? '—'}</div>
+          <div class="stat-label">${lang==='ru'?'дней вместе':'días juntos'}</div>
         </div>
         <div class="stat-card">
-          <div class="stat-icon">🔥</div>
-          <div class="stat-value">${streak}</div>
-          <div class="stat-label">Racha de lectura</div>
+          <div class="stat-num display" style="color:var(--rose)">${d.streak ?? '—'}</div>
+          <div class="stat-label">${lang==='ru'?'серия 🔥':'racha 🔥'}</div>
         </div>
         <div class="stat-card">
-          <div class="stat-icon">💬</div>
-          <div class="stat-value">${msgCount}</div>
-          <div class="stat-label">Mensajes</div>
+          <div class="stat-num display" style="color:var(--ice)">${d.totalMsgs ?? '—'}</div>
+          <div class="stat-label">${lang==='ru'?'сообщений':'mensajes'}</div>
         </div>
         <div class="stat-card">
-          <div class="stat-icon">📔</div>
-          <div class="stat-value">${diaryCount}</div>
-          <div class="stat-label">Entradas diario</div>
+          <div class="stat-num display" style="color:var(--mint)">${d.totalDiary ?? '—'}</div>
+          <div class="stat-label">${lang==='ru'?'дневник':'diario'}</div>
         </div>
         <div class="stat-card">
-          <div class="stat-icon">📚</div>
-          <div class="stat-value">${booksCount}</div>
-          <div class="stat-label">Libros compartidos</div>
+          <div class="stat-num display" style="color:var(--lav)">${d.totalBooks ?? '—'}</div>
+          <div class="stat-label">${lang==='ru'?'книги 📚':'libros 📚'}</div>
         </div>
         <div class="stat-card">
-          <div class="stat-icon">✈️</div>
-          <div class="stat-value">${Utils.daysUntil(State.get('meetingDate') || cfg.MEETING_DATE)}</div>
-          <div class="stat-label">Días para el encuentro</div>
+          <div class="stat-num display" style="color:var(--amber)">${d.daysUntil ?? '—'}</div>
+          <div class="stat-label">${lang==='ru'?'дней до встречи ✈️':'días para vernos ✈️'}</div>
         </div>
       </div>
 
-      <div class="section-label" style="margin-top:8px">Tu historia</div>
-      <div class="card stagger" style="text-align:center">
-        <div style="font-family:'Caveat',cursive;font-size:1.3rem;color:var(--text2);line-height:1.8">
-          ${days} días desde que se conocieron.<br>
-          ${msgCount} palabras de amor cruzando el Atlántico.<br>
-          Una historia que recién empieza ✨
-        </div>
-      </div>
+      ${d.books?.length ? `
+      <div class="section-label">${lang==='ru'?'Прогресс чтения':'Progreso de lectura'}</div>
+      ${d.books.map(b => `
+        <div class="card" style="display:flex;align-items:center;gap:12px;margin-bottom:8px">
+          <div style="font-size:1.4rem;width:42px;height:42px;background:var(--surface2);border-radius:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0">📖</div>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:.85rem;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${Utils.escHtml(b.title)}</div>
+            <div style="height:5px;background:var(--surface2);border-radius:3px;margin-top:6px;overflow:hidden">
+              <div style="height:100%;width:${b.progress_pct||0}%;background:linear-gradient(90deg,var(--amber),var(--rose));border-radius:3px"></div>
+            </div>
+            <div style="font-size:.62rem;color:var(--muted);margin-top:3px">${b.progress_pct||0}%</div>
+          </div>
+        </div>`).join('')}` : ''}
     `;
   }
+
   return { init };
 })();
 
 
-// ── CHALLENGES PAGE ──────────────────────────────────────────────────────────
+// ── CHALLENGES PAGE ───────────────────────────────────────────────────────────
 const PageChallenges = (() => {
+
   const CHALLENGES = [
-    { id:'c1', icon:'📖', title:'Leer juntos', desc:'Lean 10 páginas en el mismo día', target:10, unit:'páginas', xp:50 },
-    { id:'c2', icon:'💬', title:'Conversación fluida', desc:'Envíen 20 mensajes en un día', target:20, unit:'mensajes', xp:30 },
-    { id:'c3', icon:'✏️', title:'Diario compartido', desc:'Escriban 5 entradas de diario', target:5, unit:'entradas', xp:40 },
-    { id:'c4', icon:'🎵', title:'Escuchar juntos', desc:'Agreguen 3 canciones a su playlist', target:3, unit:'canciones', xp:25 },
-    { id:'c5', icon:'🎨', title:'Arte en pareja', desc:'Hagan 3 dibujos juntos', target:3, unit:'dibujos', xp:35 },
-    { id:'c6', icon:'🌐', title:'Hablar el idioma del otro', desc:'Traduzcan 10 frases', target:10, unit:'frases', xp:45 },
-    { id:'c7', icon:'🔥', title:'Racha de fuego', desc:'Lean 7 días seguidos', target:7, unit:'días', xp:100 },
-    { id:'c8', icon:'💌', title:'Cartas de amor', desc:'Escriban una entrada larga de diario', target:1, unit:'carta', xp:60 },
+    { key:'read_7_days',  ico:'📖', xp:50,  target:7,  es:'Lector dedicado',    ru:'Преданный читатель',   des_es:'Lee 7 días seguidos',              des_ru:'Читай 7 дней подряд' },
+    { key:'msgs_50',      ico:'💬', xp:30,  target:50, es:'Conversadores',      ru:'Собеседники',          des_es:'50 mensajes este mes',             des_ru:'50 сообщений в этом месяце' },
+    { key:'diary_5',      ico:'📔', xp:40,  target:5,  es:'Cronistas',          ru:'Летописцы',            des_es:'5 entradas de diario',             des_ru:'5 записей в дневник' },
+    { key:'draw_3',       ico:'🎨', xp:25,  target:3,  es:'Artistas',           ru:'Художники',            des_es:'Dibujen juntos 3 veces',           des_ru:'Рисуйте вместе 3 раза' },
+    { key:'translate_20', ico:'🌍', xp:20,  target:20, es:'Políglota',          ru:'Полиглот',             des_es:'Usen el traductor 20 veces',       des_ru:'Используйте переводчик 20 раз' },
+    { key:'book_finish',  ico:'📚', xp:100, target:1,  es:'Terminar un libro',  ru:'Дочитать книгу',       des_es:'Terminen un libro juntos',         des_ru:'Дочитайте книгу вместе' },
+    { key:'streak_30',    ico:'🔥', xp:150, target:30, es:'Racha épica',        ru:'Эпическая серия',      des_es:'30 días de racha',                 des_ru:'30 дней подряд' },
+    { key:'online_20',    ico:'⭐', xp:60,  target:20, es:'Siempre conectados', ru:'Всегда на связи',      des_es:'Entren 20 días este mes',          des_ru:'Входите 20 дней в этом месяце' },
   ];
 
   async function init(container) {
-    const streak = parseInt(localStorage.getItem('dl_streak') || '0');
-    let progress = {};
-    try { progress = JSON.parse(localStorage.getItem('dl_ch_progress') || '{}'); } catch {}
+    const lang = State.get('profile')?.lang || 'es';
+    container.innerHTML = '<div class="page-title display">' + (lang==='ru'?'Задания 🔥':'Retos 🔥') + '</div><div style="padding:20px;text-align:center"><div class="spinner"></div></div>';
 
-    container.innerHTML = `
-      <div class="page-title">Retos <span style="font-size:1.4rem">🔥</span></div>
-      <div class="page-sub">Desafíos para crecer juntos</div>
+    const coupleId = AppAuth.currentCoupleId();
+    const month = new Date().toISOString().slice(0,7);
+    const progress = {};
 
-      ${streak > 0 ? `
-      <div class="fire-streak stagger">
-        <div class="fire">🔥</div>
-        <div>
-          <div class="fire-streak-num">${streak}</div>
-          <div class="fire-streak-label">días leyendo · ¡Sigan así!</div>
-        </div>
-        <div style="font-family:'Caveat',cursive;font-size:1.2rem;color:var(--amber);margin-left:auto">${streak >= 7 ? '🏆' : streak >= 3 ? '⭐' : '✨'}</div>
-      </div>` : ''}
+    if (coupleId) {
+      try {
+        const rows = await DB.get('challenges', { eq: [['couple_id', coupleId], ['month', month]] });
+        rows.forEach(function(r) { progress[r.key] = r; });
 
-      <div class="section-label">Retos activos</div>
-      <div class="stagger">
-        ${CHALLENGES.map(c => {
-          const prog = progress[c.id] || 0;
-          const pct = Math.min(100, (prog / c.target) * 100);
-          const done = pct >= 100;
-          return `
-          <div class="challenge-card ${done ? 'completed' : ''}">
-            <div class="ch-header">
-              <div class="ch-icon">${done ? '✅' : c.icon}</div>
-              <div>
-                <div class="ch-title">${c.title}</div>
-                <div class="ch-desc">${c.desc}</div>
-              </div>
-              <span class="ch-points">+${c.xp} XP</span>
-            </div>
-            <div class="ch-progress">
-              <div class="ch-bar"><div class="ch-fill" style="width:${pct}%"></div></div>
-              <div class="ch-meta">
-                <span>${prog} / ${c.target} ${c.unit}</span>
-                <span>${done ? '¡Completado! 🎉' : Math.round(pct) + '%'}</span>
-              </div>
-            </div>
-            ${!done ? `<div style="padding:0 16px 12px">
-              <button class="btn btn-ghost btn-sm" onclick="PageChallenges._progress('${c.id}',${c.target},${prog})">+ Actualizar progreso</button>
-            </div>` : ''}
-          </div>`;
-        }).join('')}
-      </div>
-    `;
-    window._chalContainer = container;
-  }
+        const monthStart = new Date(month + '-01');
+        const msgs  = await DB.get('messages', { eq: [['couple_id', coupleId]], select: 'id,created_at' });
+        const diary = await DB.get('diary',    { eq: [['couple_id', coupleId]], select: 'id,created_at' });
+        const books = await DB.get('books',    { eq: [['couple_id', coupleId]], select: 'id,progress_pct' });
 
-  function _progress(id, target, current) {
-    const ch = CHALLENGES.find(c => c.id === id);
-    if (!ch) return;
-    const newProg = Math.min(target, current + 1);
-    let progress = {};
-    try { progress = JSON.parse(localStorage.getItem('dl_ch_progress') || '{}'); } catch {}
-    progress[id] = newProg;
-    localStorage.setItem('dl_ch_progress', JSON.stringify(progress));
-    if (newProg >= target) {
-      toast(`🎉 ¡Reto completado! +${ch.xp} XP`);
-      Notifications.add({ text: `¡Completaron el reto "${ch.title}"! +${ch.xp} XP`, icon: '🏆' });
-    } else {
-      toast(`✅ Progreso actualizado: ${newProg}/${target}`);
+        const msgsMonth  = msgs.filter(function(m)  { return new Date(m.created_at) >= monthStart; }).length;
+        const diaryMonth = diary.filter(function(d) { return new Date(d.created_at) >= monthStart; }).length;
+        const booksDone  = books.filter(function(b) { return b.progress_pct >= 100; }).length;
+        const streak     = KM ? KM.streak : 0;
+
+        progress['msgs_50']     = { progress: msgsMonth,          completed: msgsMonth  >= 50 };
+        progress['diary_5']     = { progress: diaryMonth,         completed: diaryMonth >= 5  };
+        progress['book_finish'] = { progress: booksDone,          completed: booksDone  >= 1  };
+        progress['streak_30']   = { progress: streak,             completed: streak     >= 30 };
+        progress['read_7_days'] = { progress: Math.min(streak,7), completed: streak     >= 7  };
+      } catch(e) { console.error('challenges', e); }
     }
-    init(window._chalContainer);
+
+    _render(container, progress, lang, month);
   }
 
-  return { init, _progress };
+  function _card(ch, p, lang) {
+    var cur  = Math.min((p && p.progress) || 0, ch.target);
+    var pct  = Math.round(cur / ch.target * 100);
+    var done = (p && p.completed) || pct >= 100;
+    var title      = lang === 'ru' ? ch.ru      : ch.es;
+    var desc       = lang === 'ru' ? ch.des_ru  : ch.des_es;
+    var doneText   = lang === 'ru' ? 'Выполнено ✓' : 'Completado ✓';
+    var cardBorder = done ? 'border-color:rgba(112,200,160,.4);background:rgba(112,200,160,.05)' : '';
+    var barBg      = done ? 'var(--mint)' : 'linear-gradient(90deg,var(--amber),var(--rose))';
+    var icon       = done ? '✅' : ch.ico;
+    var pctLabel   = pct + '%' + (done ? ' · ' + doneText : '');
+
+    return '<div class="card" style="margin-bottom:10px;' + cardBorder + '">' +
+      '<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">' +
+        '<div style="width:42px;height:42px;background:var(--surface2);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:1.3rem;flex-shrink:0">' + icon + '</div>' +
+        '<div style="flex:1">' +
+          '<div style="font-weight:600;font-size:.88rem">' + title + '</div>' +
+          '<div style="font-size:.72rem;color:var(--muted)">' + desc + '</div>' +
+        '</div>' +
+        '<div style="font-size:.72rem;color:var(--amber);font-weight:700;flex-shrink:0">+' + ch.xp + ' km</div>' +
+      '</div>' +
+      '<div style="display:flex;justify-content:space-between;font-size:.7rem;color:var(--muted);margin-bottom:4px">' +
+        '<span>' + cur + ' / ' + ch.target + '</span>' +
+        '<span>' + pctLabel + '</span>' +
+      '</div>' +
+      '<div style="height:6px;background:var(--surface2);border-radius:3px;overflow:hidden">' +
+        '<div style="height:100%;width:' + pct + '%;background:' + barBg + ';border-radius:3px;transition:width .8s"></div>' +
+      '</div>' +
+    '</div>';
+  }
+
+  function _render(container, progress, lang, month) {
+    const lv     = KM ? KM.level() : { ico:'🌱', name:'Despegando' };
+    const km     = KM ? KM._total : 0;
+    const streak = KM ? KM.streak : 0;
+    const d      = new Date();
+    const monthName = d.toLocaleDateString(lang==='ru'?'ru':'es', { month:'long', year:'numeric' });
+    const cards  = CHALLENGES.map(function(ch) { return _card(ch, progress[ch.key], lang); }).join('');
+
+    container.innerHTML =
+      '<div class="page-title display">' + (lang==='ru'?'Задания 🔥':'Retos 🔥') + '</div>' +
+      '<div class="page-sub">' + monthName + '</div>' +
+      '<div class="card" style="background:linear-gradient(135deg,rgba(232,168,74,.1),rgba(224,120,144,.08));border-color:rgba(232,168,74,.3);display:flex;align-items:center;gap:14px">' +
+        '<div style="font-size:2.5rem">' + lv.ico + '</div>' +
+        '<div style="flex:1">' +
+          '<div style="font-size:1rem;font-weight:600">' + lv.name + '</div>' +
+          '<div style="font-size:.75rem;color:var(--muted)">' + km.toFixed(1) + ' km · ' + streak + (lang==='ru'?' дней серии':' días de racha') + '</div>' +
+        '</div>' +
+        '<div style="text-align:right">' +
+          '<div class="display" style="font-size:1.6rem;color:var(--amber)">' + (KM?KM.fmt():'0km') + '</div>' +
+        '</div>' +
+      '</div>' +
+      '<div class="section-label">' + (lang==='ru'?('Задания ' + monthName):('Retos de ' + monthName)) + '</div>' +
+      cards;
+  }
+
+  return { init };
 })();
 
 
 // ── CONFIG PAGE ───────────────────────────────────────────────────────────────
 const PageConfig = (() => {
-  function init(container) {
-    const profile = State.get('profile');
+  async function init(container) {
+    const user    = State.get('profile');
     const couple  = State.get('couple');
     const partner = State.get('partner');
-    const theme   = State.get('theme') || 'dark';
+    const lang    = user?.lang || 'es';
+    const dark    = document.body.getAttribute('data-theme') !== 'light';
+
+    const metDate  = couple?.met_date     || window.DL_CONFIG?.MET_DATE     || '2024-06-01';
+    const meetDate = couple?.meeting_date || window.DL_CONFIG?.MEETING_DATE || '2026-09-15';
 
     container.innerHTML = `
-      <div class="page-title display">Ajustes ⚙️</div>
-      <div class="page-sub">Tu espacio, a tu manera</div>
+      <div class="page-title display">${lang==='ru'?'Настройки ⚙️':'Ajustes ⚙️'}</div>
+      <div class="page-sub">${lang==='ru'?'Твоё пространство':'Tu espacio, a tu manera'}</div>
 
-      <div class="section-label">Tu perfil</div>
+      <!-- Perfil -->
+      <div class="section-label">${lang==='ru'?'Профиль':'Tu perfil'}</div>
       <div class="card">
         <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
-          <div style="font-size:2rem;background:var(--surface2);width:52px;height:52px;border-radius:14px;display:flex;align-items:center;justify-content:center">${profile?.emoji||'😊'}</div>
+          <div style="font-size:2rem;background:var(--surface2);width:52px;height:52px;border-radius:14px;display:flex;align-items:center;justify-content:center">${user?.emoji||'😊'}</div>
           <div>
-            <div style="font-weight:600">${Utils.escHtml(profile?.display_name||'')}</div>
+            <div style="font-weight:600">${Utils.escHtml(user?.display_name||'')}</div>
             <div style="font-size:.75rem;color:var(--muted)">${State.get('user')?.email||''}</div>
           </div>
         </div>
-        <button class="btn btn-danger btn-sm" onclick="AppAuth.signOut()">Cerrar sesión</button>
+        <div class="form-group">
+          <label class="input-label">${lang==='ru'?'Твой язык':'Tu idioma'}</label>
+          <div style="display:flex;gap:8px">
+            <button onclick="PageConfig._setLang('es')" class="btn btn-sm ${lang==='es'?'btn-primary':'btn-ghost'}" style="flex:1">🇪🇸 Español</button>
+            <button onclick="PageConfig._setLang('ru')" class="btn btn-sm ${lang==='ru'?'btn-primary':'btn-ghost'}" style="flex:1">🇷🇺 Русский</button>
+          </div>
+        </div>
+        <button class="btn btn-danger btn-full btn-sm" style="margin-top:4px" onclick="PageConfig._signOut()">
+          ${lang==='ru'?'Выйти':'Cerrar sesión'}
+        </button>
       </div>
 
-      <div class="section-label">Tu pareja</div>
+      <!-- Fechas de la pareja -->
+      <div class="section-label">${lang==='ru'?'Ваши даты':'Sus fechas'}</div>
       <div class="card">
-        ${couple ? `
-          <div style="margin-bottom:12px">
-            <div style="font-size:.75rem;color:var(--muted);margin-bottom:4px">Espacio</div>
-            <div style="font-weight:500">${Utils.escHtml(couple.name||'')}</div>
-          </div>
-          ${partner ? `
-          <div style="margin-bottom:12px">
-            <div style="font-size:.75rem;color:var(--muted);margin-bottom:4px">Tu pareja</div>
-            <div style="font-size:1.1rem">${partner.emoji||'❤️'} ${Utils.escHtml(partner.display_name||'')}</div>
-          </div>` : `
-          <div style="margin-bottom:12px;background:var(--amber-s);border:1px solid rgba(232,168,74,.3);border-radius:var(--r-sm);padding:12px">
-            <div style="font-size:.75rem;color:var(--amber);font-weight:600;margin-bottom:6px">⏳ Esperando a tu pareja</div>
-            <div style="font-size:.75rem;color:var(--text2)">Comparte este código:</div>
-          </div>`}
-          <div style="font-size:.75rem;color:var(--muted);margin-bottom:6px">Código de invitación</div>
-          <div class="invite-code-display" style="font-size:1.5rem;letter-spacing:.18em">${couple.invite_code||''}</div>
-          <div style="display:flex;gap:8px;margin-top:8px">
-            <button class="btn btn-ghost btn-sm" style="flex:1" onclick="navigator.clipboard?.writeText('${couple.invite_code||''}').then(()=>toast('Código copiado'))">
-              📋 Código
-            </button>
-            <button class="btn btn-primary btn-sm" style="flex:2" onclick="PageConfig._copyLink('${couple.invite_code||''}')">
-              🔗 Copiar link de invitación
-            </button>
-          </div>
-        ` : '<div style="color:var(--muted);font-size:.85rem">No estás en ningún espacio</div>'}
+        <div class="form-group">
+          <label class="input-label">${lang==='ru'?'Дата знакомства':'¿Cuándo se conocieron?'}</label>
+          <input type="date" class="input-field" id="cfg-met-date" value="${metDate}">
+        </div>
+        <div class="form-group">
+          <label class="input-label">${lang==='ru'?'Дата встречи (необязательно)':'¿Cuándo se van a ver? (opcional)'}</label>
+          <input type="date" class="input-field" id="cfg-meet-date" value="${meetDate}">
+        </div>
+        <button class="btn btn-primary btn-full" onclick="PageConfig._saveDates()">
+          ${lang==='ru'?'💾 Сохранить':'💾 Guardar fechas'}
+        </button>
       </div>
 
-      <div class="section-label">Apariencia</div>
+      <!-- Pareja -->
+      <div class="section-label">${lang==='ru'?'Пространство':'Tu pareja'}</div>
+      <div class="card">
+        <div style="margin-bottom:12px">
+          <div style="font-size:.72rem;color:var(--muted);margin-bottom:4px">${lang==='ru'?'Пространство':'Espacio'}</div>
+          <div style="font-weight:500">${Utils.escHtml(couple?.name||'—')}</div>
+        </div>
+        ${partner ? `<div style="margin-bottom:12px">
+          <div style="font-size:.72rem;color:var(--muted);margin-bottom:4px">${lang==='ru'?'Партнёр':'Tu pareja'}</div>
+          <div style="font-size:1.1rem">${partner.emoji} ${Utils.escHtml(partner.display_name||'')}</div>
+        </div>` : ''}
+        <div style="font-size:.72rem;color:var(--muted);margin-bottom:6px">${lang==='ru'?'Код приглашения':'Código de invitación'}</div>
+        <div class="invite-code-display">${couple?.invite_code||'—'}</div>
+        <div style="display:flex;gap:8px;margin-top:8px">
+          <button class="btn btn-ghost btn-sm" style="flex:1" onclick="navigator.clipboard?.writeText('${couple?.invite_code||''}').then(()=>toast('📋 ${lang==='ru'?'Скопировано':'Código copiado'}'))">
+            📋 ${lang==='ru'?'Код':'Código'}
+          </button>
+          <button class="btn btn-primary btn-sm" style="flex:2" onclick="PageConfig._copyInviteLink()">
+            🔗 ${lang==='ru'?'Ссылка':'Link de invitación'}
+          </button>
+        </div>
+      </div>
+
+      <!-- Apariencia -->
+      <div class="section-label">${lang==='ru'?'Внешний вид':'Apariencia'}</div>
       <div class="card">
         <div style="display:flex;align-items:center;justify-content:space-between">
-          <span style="font-size:.88rem">Tema oscuro</span>
+          <span style="font-size:.88rem">${lang==='ru'?'Тёмная тема':'Tema oscuro'}</span>
           <div class="toggle-wrap">
-            <input type="checkbox" id="theme-toggle" ${theme==='dark'?'checked':''} onchange="PageConfig._onTheme(this.checked)">
-            <label for="theme-toggle" class="toggle-label"></label>
+            <input type="checkbox" id="thm-toggle" ${dark?'checked':''} onchange="PageConfig._toggleTheme(this.checked)">
+            <label for="thm-toggle" class="toggle-label"></label>
           </div>
         </div>
       </div>
 
-      <div class="section-label">Conexión</div>
-      <div class="card">
-        <div style="display:flex;align-items:center;gap:8px;font-size:.82rem">
-          <div id="db-status-dot" style="width:8px;height:8px;border-radius:50%;background:var(--muted)"></div>
-          <span id="db-status-text">Verificando...</span>
-        </div>
-      </div>
-
-      <div style="padding:24px 20px;text-align:center;font-family:'Caveat',cursive;font-size:1rem;color:var(--muted)">
+      <div style="padding:24px;text-align:center;font-family:'Caveat',cursive;font-size:1rem;color:var(--muted)">
         Solo para dos · DuoLector 🧡
       </div>`;
+  }
 
-    // Check DB
-    DB.ping().then(ok => {
-      const dot = Utils.el('db-status-dot');
-      const txt = Utils.el('db-status-text');
-      if (dot) dot.style.background = ok ? 'var(--mint)' : '#e06060';
-      if (txt) txt.textContent = ok ? 'Conectado a Supabase ✓' : 'Sin conexión';
+  function _toggleTheme(dark) {
+    const theme = dark ? 'dark' : 'light';
+    document.body.setAttribute('data-theme', theme);
+    State.set('theme', theme);
+  }
+
+  async function _setLang(lang) {
+    const user = State.get('profile');
+    if (!user) return;
+    try {
+      await DB.upsert('profiles', { id: user.id, lang }, { onConflict: 'id' });
+      State.set('profile', { ...user, lang });
+      if (window.toast) toast(lang === 'ru' ? '🇷🇺 Язык изменён' : '🇪🇸 Idioma cambiado');
+      // Re-render config with new lang
+      const c = Utils.el('page-config');
+      if (c) init(c);
+    } catch (e) {
+      if (window.toast) toast('⚠️ ' + e.message);
+    }
+  }
+
+  async function _saveDates() {
+    const metDate  = Utils.el('cfg-met-date')?.value;
+    const meetDate = Utils.el('cfg-meet-date')?.value;
+    const coupleId = AppAuth.currentCoupleId();
+    if (!coupleId) return;
+    try {
+      await DB.update('couples', { id: coupleId }, {
+        ...(metDate  ? { met_date:     metDate  } : {}),
+        ...(meetDate ? { meeting_date: meetDate } : {}),
+      });
+      // Update local state
+      const couple = State.get('couple');
+      State.set('couple', { ...couple, met_date: metDate, meeting_date: meetDate });
+      const lang = State.get('profile')?.lang || 'es';
+      if (window.toast) toast(lang === 'ru' ? '💾 Сохранено' : '💾 Fechas guardadas');
+    } catch (e) {
+      if (window.toast) toast('⚠️ ' + e.message);
+    }
+  }
+
+  function _copyInviteLink() {
+    const couple = State.get('couple');
+    if (!couple) return;
+    const base = window.DL_CONFIG?.APP_URL || window.location.href.split('?')[0];
+    const link = base + '?invite=' + couple.invite_code;
+    navigator.clipboard?.writeText(link).then(() => {
+      const lang = State.get('profile')?.lang || 'es';
+      if (window.toast) toast(lang === 'ru' ? '🔗 Ссылка скопирована' : '🔗 Link copiado');
     });
   }
 
-  function _copyLink(code) {
-    const link = CoupleSetup.inviteLink(code);
-    navigator.clipboard?.writeText(link).then(() => toast('🔗 Link copiado'));
+  async function _signOut() {
+    await AppAuth.signOut();
   }
 
-  function _onTheme(dark) {
-    const t = dark ? 'dark' : 'light';
-    State.set('theme', t);
-    document.body.setAttribute('data-theme', t);
-  }
-
-  return { init, _onTheme, _copyLink };
+  return { init, _toggleTheme, _setLang, _saveDates, _copyInviteLink, _signOut };
 })();
 
 
