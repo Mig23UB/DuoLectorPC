@@ -9,6 +9,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,300;1,400&family=DM+Sans:wght@300;400;500;600&family=Caveat:wght@400;600&display=swap" rel="stylesheet">
+<script src="https://www.paypal.com/sdk/js?client-id=BAAVuIwcp8S2CCNpefKiYp1A1U9YtBxpy6cWO4i9YYD4B0pRzbJoc7-zuKwd1TN4OEyVhV3UK8-FNnNqtE&components=hosted-buttons&disable-funding=venmo&currency=USD"></script>
 <style>
 /* ══════════════════════════════════════════════════════════
    DUOLECTOR — MAIN CSS
@@ -1307,7 +1308,7 @@ window.DL_LOGO='data:image/png;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUNDX1BST0
 </script>
 <script>
 (function(){
-// ── DB: Supabase wrapper (Auth-aware, couple-scoped) ─────────────────────────
+// ── DB: Supabase wrapper ───────────────────────────────────────────────────────
 const DB = (() => {
   let _sb = null;
 
@@ -1319,6 +1320,13 @@ const DB = (() => {
       });
     }
     return _sb;
+  }
+
+  // ── Warm up: ping Supabase to wake from free-tier sleep ──
+  async function warmUp() {
+    try {
+      await client().from('profiles').select('id').limit(1);
+    } catch {}
   }
 
   // ── Auth ──
@@ -1343,9 +1351,7 @@ const DB = (() => {
       });
       if (error) throw error;
     },
-    async signOut() {
-      await client().auth.signOut();
-    },
+    async signOut() { await client().auth.signOut(); },
     async getUser() {
       const { data: { user } } = await client().auth.getUser();
       return user;
@@ -1354,18 +1360,17 @@ const DB = (() => {
       const { data: { session } } = await client().auth.getSession();
       return session;
     },
-    onAuthChange(cb) {
-      return client().auth.onAuthStateChange(cb);
-    }
+    onAuthChange(cb) { return client().auth.onAuthStateChange(cb); }
   };
 
   // ── Data helpers ──
-  async function get(table, query = {}) {
+  async function get(table, query) {
+    query = query || {};
     let q = client().from(table).select(query.select || '*');
-    if (query.eq)     for (const [k,v] of query.eq) q = q.eq(k, v);
-    if (query.eqOne)  q = q.eq(...query.eqOne);
-    if (query.order)  q = q.order(...query.order);
-    if (query.limit)  q = q.limit(query.limit);
+    if (query.eq)    for (var i = 0; i < query.eq.length; i++) q = q.eq(query.eq[i][0], query.eq[i][1]);
+    if (query.eqOne) q = q.eq(query.eqOne[0], query.eqOne[1]);
+    if (query.order) q = q.order(query.order[0], query.order[1] || {});
+    if (query.limit) q = q.limit(query.limit);
     const { data, error } = await q;
     if (error) throw error;
     return data || [];
@@ -1377,22 +1382,24 @@ const DB = (() => {
     return data;
   }
 
-  async function upsert(table, row, opts = {}) {
-    const { data, error } = await client().from(table).upsert(row, opts).select().single();
+  async function upsert(table, row, opts) {
+    const { data, error } = await client().from(table).upsert(row, opts || {}).select().single();
     if (error) throw error;
     return data;
   }
 
   async function update(table, match, changes) {
     let q = client().from(table).update(changes);
-    for (const [k,v] of Object.entries(match)) q = q.eq(k, v);
+    var keys = Object.keys(match);
+    for (var i = 0; i < keys.length; i++) q = q.eq(keys[i], match[keys[i]]);
     const { error } = await q;
     if (error) throw error;
   }
 
   async function remove(table, match) {
     let q = client().from(table).delete();
-    for (const [k,v] of Object.entries(match)) q = q.eq(k, v);
+    var keys = Object.keys(match);
+    for (var i = 0; i < keys.length; i++) q = q.eq(keys[i], match[keys[i]]);
     const { error } = await q;
     if (error) throw error;
   }
@@ -1402,21 +1409,20 @@ const DB = (() => {
       cacheControl: '3600', upsert: true
     });
     if (error) throw error;
-    const { data: { publicUrl } } = client().storage.from(bucket).getPublicUrl(path);
-    return publicUrl;
+    const { data } = client().storage.from(bucket).getPublicUrl(path);
+    return data.publicUrl;
   }
 
-  // ── Couple-scoped settings ──
   async function getSetting(coupleId, key) {
     try {
       const rows = await get('settings', { eq: [['couple_id', coupleId], ['key', key]] });
-      return rows?.[0]?.value ?? null;
+      return rows && rows[0] ? rows[0].value : null;
     } catch { return null; }
   }
 
   async function setSetting(coupleId, key, value) {
     return upsert('settings', {
-      couple_id: coupleId, key, value,
+      couple_id: coupleId, key: key, value: value,
       updated_at: new Date().toISOString()
     }, { onConflict: 'couple_id,key' });
   }
@@ -1428,7 +1434,7 @@ const DB = (() => {
     } catch { return false; }
   }
 
-  return { client, Auth, get, insert, upsert, update, remove, uploadFile, getSetting, setSetting, ping };
+  return { client, Auth, warmUp, get, insert, upsert, update, remove, uploadFile, getSetting, setSetting, ping };
 })();
 
 
@@ -1536,21 +1542,18 @@ const Utils = {
 };
 
 
-// ── State ────────────────────────────────────────────────────────────────────
+// ── State ─────────────────────────────────────────────────────────────────────
 const State = (() => {
   const _s = {
-    user: null,       // Supabase user object
-    profile: null,    // { id, display_name, emoji, color }
-    couple: null,     // { id, name, invite_code }
-    members: [],      // [{ user_id, display_name, emoji, color }]
-    partner: null,    // the other member's profile
-    theme: 'dark',
-    streak: 0,
-    currentBook: null,
+    user: null, profile: null, couple: null,
+    members: [], partner: null,
+    theme: 'dark', streak: 0, currentBook: null,
+    // Page cache — stores fetched data per page so we don't reload every visit
+    _cache: {}
   };
   const _listeners = {};
 
-  function get(k) { return _s[k]; }
+  function get(k)   { return _s[k]; }
   function set(k, v) {
     _s[k] = v;
     (_listeners[k] || []).forEach(fn => fn(v));
@@ -1558,28 +1561,48 @@ const State = (() => {
   }
   function on(k, fn) { (_listeners[k] = _listeners[k] || []).push(fn); }
 
+  function cache(key, data) {
+    if (data !== undefined) { _s._cache[key] = { data, ts: Date.now() }; return data; }
+    const c = _s._cache[key];
+    if (!c) return null;
+    // Cache valid for 30 seconds
+    if (Date.now() - c.ts > 30000) { delete _s._cache[key]; return null; }
+    return c.data;
+  }
+
+  function invalidate(key) { delete _s._cache[key]; }
+
   function hydrate() {
     const t = localStorage.getItem('dl_theme');
     if (t) _s.theme = t;
     _s.streak = parseInt(localStorage.getItem('dl_streak') || '0');
+    // Load cached couple/partner for instant display
+    try {
+      const cp = localStorage.getItem('dl_couple');
+      const pt = localStorage.getItem('dl_partner');
+      const pr = localStorage.getItem('dl_profile');
+      if (cp) _s.couple  = JSON.parse(cp);
+      if (pt) _s.partner = JSON.parse(pt);
+      if (pr) _s.profile = JSON.parse(pr);
+    } catch {}
   }
 
   function clear() {
     _s.user = null; _s.profile = null; _s.couple = null;
     _s.members = []; _s.partner = null; _s.currentBook = null;
+    _s._cache = {};
   }
 
-  return { get, set, on, hydrate, clear };
+  return { get, set, on, hydrate, cache, invalidate, clear };
 })();
 
 
-// ── AppAuth: session + couple management ─────────────────────────────────────
+// ── AppAuth ───────────────────────────────────────────────────────────────────
 const AppAuth = (() => {
 
   async function init() {
-    // Listen for auth changes (OAuth redirect, token refresh)
     DB.Auth.onAuthChange(async (event, session) => {
-      if (session?.user) {
+      if (event === 'SIGNED_IN' && session?.user) {
         await _loadUserContext(session.user);
       } else if (event === 'SIGNED_OUT') {
         State.clear();
@@ -1587,18 +1610,10 @@ const AppAuth = (() => {
       }
     });
 
-    // Check localStorage first — if no supabase session key exists, show login immediately
-    const hasStoredSession = Object.keys(localStorage).some(k => k.includes('supabase') && k.includes('auth'));
-    if (!hasStoredSession) {
-      App.showAuth();
-      return false;
-    }
-
-    // Has stored session — try to restore it with short timeout
     try {
       const session = await Promise.race([
         DB.Auth.getSession(),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000))
+        new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 8000))
       ]);
       if (session?.user) {
         await _loadUserContext(session.user);
@@ -1607,7 +1622,6 @@ const AppAuth = (() => {
     } catch (e) {
       console.warn('Auth init:', e.message);
     }
-
     App.showAuth();
     return false;
   }
@@ -1618,90 +1632,107 @@ const AppAuth = (() => {
     // Load profile
     try {
       const rows = await DB.get('profiles', { eqOne: ['id', user.id] });
-      State.set('profile', rows[0] || { id: user.id, display_name: user.email?.split('@')[0], emoji: '😊' });
+      State.set('profile', rows[0] || { id: user.id, display_name: user.email?.split('@')[0], emoji: '😊', lang: 'es' });
     } catch {
-      State.set('profile', { id: user.id, display_name: user.email?.split('@')[0], emoji: '😊' });
+      State.set('profile', { id: user.id, display_name: user.email?.split('@')[0], emoji: '😊', lang: 'es' });
     }
 
-    // Load couple membership
+    // Load couple
     try {
       const memberships = await DB.get('couple_members', { eqOne: ['user_id', user.id] });
-
       if (memberships.length > 0) {
         const coupleId = memberships[0].couple_id;
-        const couples = await DB.get('couples', { eqOne: ['id', coupleId] });
-        State.set('couple', couples[0] || null);
 
-        const allMembers = await DB.get('couple_members', { eqOne: ['couple_id', coupleId] });
+        // Load couple + all members in parallel
+        const [couples, allMembers] = await Promise.all([
+          DB.get('couples',        { eqOne: ['id', coupleId] }),
+          DB.get('couple_members', { eqOne: ['couple_id', coupleId] }),
+        ]);
+
+        const couple  = couples[0] || null;
+        const partner = allMembers.find(m => m.user_id !== user.id) || null;
+
+        State.set('couple',  couple);
         State.set('members', allMembers);
+        State.set('partner', partner);
 
-        const partner = allMembers.find(m => m.user_id !== user.id);
-        State.set('partner', partner || null);
+        // Cache in localStorage for instant load next time
+        try {
+          localStorage.setItem('dl_couple',  JSON.stringify(couple));
+          localStorage.setItem('dl_partner', JSON.stringify(partner));
+          localStorage.setItem('dl_profile', JSON.stringify(State.get('profile')));
+        } catch {}
 
         App.showApp();
       } else {
         App.showCoupleSetup();
       }
     } catch (e) {
-      console.error('couple load error:', e);
+      console.error('couple load:', e);
+      // Try cache
+      try {
+        const cached = localStorage.getItem('dl_couple');
+        if (cached) {
+          State.set('couple',  JSON.parse(cached));
+          State.set('partner', JSON.parse(localStorage.getItem('dl_partner') || 'null'));
+          App.showApp();
+          return;
+        }
+      } catch {}
       App.showCoupleSetup();
     }
   }
 
-  async function createCouple(name, myDisplayName, myEmoji) {
+  async function createCouple(name, myDisplayName, myEmoji, myTimezone, myCity) {
     const user = State.get('user');
     if (!user) throw new Error('No hay sesión activa');
 
-    // Check if user already has a couple (prevent duplicates)
     const existing = await DB.get('couple_members', { eqOne: ['user_id', user.id] });
     if (existing.length > 0) throw new Error('Ya tenés un espacio creado');
 
     const couple = await DB.insert('couples', { name });
     await DB.insert('couple_members', {
-      couple_id: couple.id,
-      user_id: user.id,
-      display_name: myDisplayName,
-      emoji: myEmoji
+      couple_id: couple.id, user_id: user.id,
+      display_name: myDisplayName, emoji: myEmoji,
+      timezone: myTimezone || 'America/Montevideo',
+      city: myCity || ''
     });
     await DB.upsert('profiles', {
-      id: user.id, display_name: myDisplayName, emoji: myEmoji
+      id: user.id, display_name: myDisplayName, emoji: myEmoji,
+      timezone: myTimezone || 'America/Montevideo', city: myCity || ''
     }, { onConflict: 'id' });
 
     await _loadUserContext(user);
   }
 
-  async function joinCouple(inviteCode, myDisplayName, myEmoji) {
+  async function joinCouple(inviteCode, myDisplayName, myEmoji, myTimezone, myCity) {
     const user = State.get('user');
     if (!user) throw new Error('No hay sesión activa');
 
-    // Need to use a different approach — query without RLS by invite code
     const { data, error } = await DB.client()
-      .from('couples')
-      .select('*')
+      .from('couples').select('*')
       .eq('invite_code', inviteCode.toLowerCase().trim())
       .single();
 
     if (error || !data) throw new Error('Código de invitación inválido');
-    const couple = data;
 
-    // Check not already member
     const existing = await DB.get('couple_members', {
-      eq: [['couple_id', couple.id], ['user_id', user.id]]
+      eq: [['couple_id', data.id], ['user_id', user.id]]
     });
     if (existing.length) throw new Error('Ya sos miembro de esta pareja');
 
-    // Check not full
-    const members = await DB.get('couple_members', { eqOne: ['couple_id', couple.id] });
+    const members = await DB.get('couple_members', { eqOne: ['couple_id', data.id] });
     if (members.length >= 2) throw new Error('Esta pareja ya está completa');
 
     await DB.insert('couple_members', {
-      couple_id: couple.id,
-      user_id: user.id,
-      display_name: myDisplayName,
-      emoji: myEmoji
+      couple_id: data.id, user_id: user.id,
+      display_name: myDisplayName, emoji: myEmoji,
+      timezone: myTimezone || 'America/Montevideo',
+      city: myCity || ''
     });
     await DB.upsert('profiles', {
-      id: user.id, display_name: myDisplayName, emoji: myEmoji
+      id: user.id, display_name: myDisplayName, emoji: myEmoji,
+      timezone: myTimezone || 'America/Montevideo', city: myCity || ''
     }, { onConflict: 'id' });
 
     await _loadUserContext(user);
@@ -1709,6 +1740,11 @@ const AppAuth = (() => {
 
   async function signOut() {
     try { await DB.Auth.signOut(); } catch {}
+    try {
+      localStorage.removeItem('dl_couple');
+      localStorage.removeItem('dl_partner');
+      localStorage.removeItem('dl_profile');
+    } catch {}
     State.clear();
     App.showAuth();
   }
@@ -2197,9 +2233,15 @@ const PageHome = (() => {
       html += '</div>';
     }
 
+    // Get timezones from profiles
+    var myTz      = user && user.timezone ? user.timezone : 'America/Montevideo';
+    var partnerTz = partner && partner.timezone ? partner.timezone : 'Europe/Samara';
+    var myTzLabel = myTz.split('/').pop().replace(/_/g,' ');
+    var ptTzLabel = partnerTz.split('/').pop().replace(/_/g,' ');
+
     html += '<div class="home-clocks">';
-    html += '<div class="clock-card"><div class="clock-flag">🇺🇾</div><div class="clock-time display" id="clock-uy">--:--</div><div class="clock-label">Montevideo</div></div>';
-    html += '<div class="clock-card" style="border-color:rgba(224,120,144,.3)"><div class="clock-flag">🇷🇺</div><div class="clock-time display" id="clock-ru">--:--</div><div class="clock-label">Ижевск</div></div>';
+    html += '<div class="clock-card"><div class="clock-flag">🕐</div><div class="clock-time display" id="clock-uy">--:--</div><div class="clock-label" style="font-size:.6rem">' + myTzLabel + '</div></div>';
+    html += '<div class="clock-card" style="border-color:rgba(224,120,144,.3)"><div class="clock-flag">🕐</div><div class="clock-time display" id="clock-ru">--:--</div><div class="clock-label" style="font-size:.6rem">' + ptTzLabel + '</div></div>';
     html += '</div></div>';
 
     // Countdown
@@ -2261,8 +2303,14 @@ const PageHome = (() => {
     var tick = function() {
       var uy = Utils.el('clock-uy'), ru = Utils.el('clock-ru');
       if (!uy || !ru) { clearInterval(_clockInterval); return; }
-      uy.textContent = new Date().toLocaleTimeString('es', { timeZone: 'America/Montevideo', hour: '2-digit', minute: '2-digit', second: '2-digit' });
-      ru.textContent = new Date().toLocaleTimeString('ru', { timeZone: 'Europe/Samara',     hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      var user    = State.get('profile');
+      var partner = State.get('partner');
+      var myTz = user && user.timezone ? user.timezone : 'America/Montevideo';
+      var ptTz = partner && partner.timezone ? partner.timezone : 'Europe/Samara';
+      var myLang = user && user.lang === 'ru' ? 'ru' : 'es';
+      var ptLang = partner ? (myLang === 'ru' ? 'es' : 'ru') : myLang;
+      uy.textContent = new Date().toLocaleTimeString(myLang, { timeZone: myTz, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      ru.textContent = new Date().toLocaleTimeString(ptLang, { timeZone: ptTz, hour: '2-digit', minute: '2-digit', second: '2-digit' });
     };
     tick();
     _clockInterval = setInterval(tick, 1000);
@@ -2691,170 +2739,166 @@ const PageDiary = (() => {
 })();
 
 
-// ── LIBRARY PAGE ─────────────────────────────────────────────────────────────
+// ── LIBRARY PAGE ──────────────────────────────────────────────────────────────
 const PageLibrary = (() => {
-  let _books = [];
-  let _localFiles = {}; // bookId -> { es: File, ru: File }
 
-  function init(container) {
-    _loadBooks(container);
+  async function init(container) {
+    // Show cached data instantly while loading fresh
+    const cached = State.cache('library');
+    if (cached) { _render(container, cached); }
+    else { container.innerHTML = '<div class="page-title display">Biblioteca 📚</div><div style="padding:40px;text-align:center"><div class="spinner"></div></div>'; }
+    var lang = State.get('profile') ? State.get('profile').lang || 'es' : 'es';
+    container.innerHTML =
+      '<div class="page-title display">' + (lang==='ru'?'Библиотека 📚':'Biblioteca 📚') + '</div>' +
+      '<div style="padding:20px;text-align:center"><div class="spinner"></div></div>';
+
+    var coupleId = AppAuth.currentCoupleId();
+    var books = [];
+
+    if (coupleId) {
+      try {
+        books = await DB.get('books', {
+          eq: [['couple_id', coupleId]],
+          order: ['created_at', { ascending: false }]
+        });
+      } catch (e) {
+        console.error('library load', e);
+      }
+    }
+
+    _render(container, books, lang);
   }
 
-  async function _loadBooks(container) {
-    container.innerHTML = `<div class="section-label">Cargando biblioteca...</div>`;
+  function _render(container, books, lang) {
+    var html =
+      '<div class="page-title display">' + (lang==='ru'?'Библиотека 📚':'Biblioteca 📚') + '</div>' +
+      '<div class="page-sub">' + (lang==='ru'?'Книги двоих':'Libros de los dos') + '</div>' +
+      '<div style="padding:0 16px 16px">' +
+        '<button class="btn btn-primary btn-full" onclick="PageLibrary._showAdd()">' +
+          (lang==='ru'?'📤 Добавить книгу':'📤 Agregar libro') +
+        '</button>' +
+      '</div>';
+
+    if (books.length === 0) {
+      html +=
+        '<div style="padding:40px 20px;text-align:center">' +
+          '<div style="font-size:3rem;margin-bottom:12px;opacity:.3">📚</div>' +
+          '<div style="font-size:.9rem;color:var(--muted);margin-bottom:6px">' + (lang==='ru'?'Нет книг':'Sin libros aún') + '</div>' +
+          '<div style="font-size:.78rem;color:var(--dim)">' + (lang==='ru'?'Добавьте первую книгу':'Agregá el primer libro') + '</div>' +
+        '</div>';
+    } else {
+      books.forEach(function(b) {
+        var pct = b.progress_pct || 0;
+        html +=
+          '<div class="card" style="display:flex;align-items:center;gap:14px;cursor:pointer;margin-bottom:8px" onclick="PageLibrary._open(' + "'" + b.id + "'" + ')">' +
+            '<div style="font-size:2rem;width:48px;height:48px;background:var(--surface2);border-radius:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0">' + (b.emoji||'📖') + '</div>' +
+            '<div style="flex:1;min-width:0">' +
+              '<div style="font-weight:600;font-size:.9rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + Utils.escHtml(b.title) + '</div>' +
+              '<div style="font-size:.75rem;color:var(--muted);margin-bottom:6px">' + Utils.escHtml(b.author||'') + '</div>' +
+              '<div style="height:5px;background:var(--surface2);border-radius:3px;overflow:hidden">' +
+                '<div style="height:100%;width:' + pct + '%;background:linear-gradient(90deg,var(--amber),var(--rose));border-radius:3px"></div>' +
+              '</div>' +
+              '<div style="font-size:.62rem;color:var(--muted);margin-top:3px">' + pct + '%</div>' +
+            '</div>' +
+          '</div>';
+      });
+    }
+
+    container.innerHTML = html;
+  }
+
+  async function _open(id) {
+    var lang = State.get('profile') ? State.get('profile').lang || 'es' : 'es';
+    var coupleId = AppAuth.currentCoupleId();
     try {
-      _books = await DB.get('books', { order: ['created_at', { ascending: false }] }) || [];
-    } catch { _books = []; }
-    _render(container);
+      var books = await DB.get('books', { eqOne: ['id', id] });
+      if (!books[0]) { if (window.toast) toast(lang==='ru'?'⚠️ Книга не найдена':'⚠️ Libro no encontrado'); return; }
+      State.set('currentBook', books[0]);
+      if (coupleId) {
+        try { await DB.setSetting(coupleId, 'current_book_id', id); } catch {}
+      }
+      Router.go('reader');
+    } catch (e) {
+      if (window.toast) toast('⚠️ ' + e.message);
+    }
   }
 
-  function _render(container) {
-    container.innerHTML = `
-      <div class="page-title">Biblioteca <span style="font-size:1.4rem">📚</span></div>
-      <div class="page-sub">Sus libros compartidos</div>
-      <div style="padding: 0 16px 12px">
-        <button class="btn btn-primary btn-full" onclick="PageLibrary._showAddModal()">
-          + Agregar libro
-        </button>
-      </div>
-      <div class="book-grid stagger">
-        ${_books.map(_bookCard).join('')}
-        ${!_books.length ? '<div style="grid-column:span 2;text-align:center;padding:40px;color:var(--muted)">Aún no hay libros 📖<br>Agrega el primero</div>' : ''}
-      </div>
-    `;
-    window._libContainer = container;
-  }
-
-  function _bookCard(book) {
-    return `
-      <div class="book-card" onclick="PageLibrary._openBook('${book.id}')">
-        <div class="book-cover">
-          ${book.cover_url ? `<img src="${book.cover_url}" onerror="this.remove()">` : ''}
-          <span style="position:relative;z-index:1">${book.emoji || '📖'}</span>
-          <div class="book-progress-bar">
-            <div class="book-progress-fill" style="width:${book.progress_pct || 0}%"></div>
-          </div>
-          ${book.progress_pct > 0 ? `<div class="book-badge">${Math.round(book.progress_pct || 0)}%</div>` : ''}
-        </div>
-        <div class="book-info">
-          <div class="book-title">${Utils.escHtml(book.title)}</div>
-          <div class="book-author">${Utils.escHtml(book.author || '')}</div>
-        </div>
-      </div>
-    `;
-  }
-
-  function _openBook(id) {
-    const book = _books.find(b => b.id === id);
-    if (!book) return;
-    State.set('currentBook', { ...book, _files: _localFiles[id] });
-    Router.go('reader');
-  }
-
-  function _showAddModal() {
-    let _pendingFiles = {};
+  function _showAdd() {
+    var lang = State.get('profile') ? State.get('profile').lang || 'es' : 'es';
     Modal.show({
-      title: '📚 Agregar libro',
-      content: `
-        <div class="form-group">
-          <label class="input-label">Título *</label>
-          <input class="input-field" id="bk-title" placeholder="El principito">
-        </div>
-        <div class="form-group">
-          <label class="input-label">Autor</label>
-          <input class="input-field" id="bk-author" placeholder="Antoine de Saint-Exupéry">
-        </div>
-        <div class="form-group">
-          <label class="input-label">Emoji del libro</label>
-          <input class="input-field" id="bk-emoji" placeholder="📖" maxlength="4">
-        </div>
-        <div class="form-group">
-          <label class="input-label">Archivo ES — PDF, TXT</label>
-          <div class="drop-zone" id="dz-es">
-            <input type="file" accept=".pdf,.txt,.epub" onchange="PageLibrary._fileSelected('es', this)">
-            <div class="drop-zone-icon">📄</div>
-            <div class="drop-zone-text" id="dz-es-txt">Toca para seleccionar</div>
-          </div>
-        </div>
-        <div class="form-group">
-          <label class="input-label">Archivo RU — PDF, TXT <span style="color:var(--muted)">(opcional)</span></label>
-          <div class="drop-zone" id="dz-ru">
-            <input type="file" accept=".pdf,.txt,.epub" onchange="PageLibrary._fileSelected('ru', this)">
-            <div class="drop-zone-icon">📄</div>
-            <div class="drop-zone-text" id="dz-ru-txt">Toca para seleccionar</div>
-          </div>
-        </div>
-      `,
-      footer: `
-        <button class="btn btn-ghost btn-sm" onclick="Modal.close()">Cancelar</button>
-        <button class="btn btn-primary" style="flex:1" onclick="PageLibrary._saveBook()">💾 Guardar</button>
-      `
+      title: lang==='ru'?'📤 Добавить книгу':'📤 Agregar libro',
+      content:
+        '<div class="form-group">' +
+          '<label class="input-label">' + (lang==='ru'?'Название':'Título') + '</label>' +
+          '<input class="input-field" id="lib-title" placeholder="' + (lang==='ru'?'Название книги':'Título del libro') + '">' +
+        '</div>' +
+        '<div class="form-group">' +
+          '<label class="input-label">' + (lang==='ru'?'Автор (необязательно)':'Autor (opcional)') + '</label>' +
+          '<input class="input-field" id="lib-author" placeholder="' + (lang==='ru'?'Автор':'Autor') + '">' +
+        '</div>' +
+        '<div class="form-group">' +
+          '<label class="input-label">' + (lang==='ru'?'PDF файл (твоя версия)':'Archivo PDF (tu versión)') + '</label>' +
+          '<div style="background:var(--surface);border:1.5px dashed var(--border2);border-radius:var(--r-sm);padding:16px;text-align:center;cursor:pointer" onclick="document.getElementById(\'lib-file\').click()">' +
+            '<div style="font-size:1.5rem;margin-bottom:6px">📄</div>' +
+            '<div style="font-size:.82rem;color:var(--muted)">' + (lang==='ru'?'Нажмите или перетащите PDF':'Click o arrastrá el PDF') + '</div>' +
+            '<div id="lib-file-name" style="font-size:.75rem;color:var(--amber);margin-top:6px"></div>' +
+          '</div>' +
+          '<input type="file" id="lib-file" accept=".pdf,.txt" style="display:none" onchange="document.getElementById(\'lib-file-name\').textContent=this.files[0]?this.files[0].name:\'\'">' +
+        '</div>',
+      footer: '<button class="btn btn-primary btn-full" onclick="PageLibrary._save()">' + (lang==='ru'?'💾 Сохранить':'💾 Guardar') + '</button>'
     });
-    window._bkPendingFiles = {};
   }
 
-  function _fileSelected(lang, input) {
-    const f = input.files[0];
-    if (!f) return;
-    if (!window._bkPendingFiles) window._bkPendingFiles = {};
-    window._bkPendingFiles[lang] = f;
-    const txt = Utils.el(`dz-${lang}-txt`);
-    if (txt) txt.textContent = `✅ ${f.name} (${Utils.fmtBytes(f.size)})`;
-  }
+  async function _save() {
+    var title  = Utils.el('lib-title') ? Utils.el('lib-title').value.trim() : '';
+    var author = Utils.el('lib-author') ? Utils.el('lib-author').value.trim() : '';
+    var fileEl = Utils.el('lib-file');
+    var file   = fileEl && fileEl.files[0] ? fileEl.files[0] : null;
+    var lang   = State.get('profile') ? State.get('profile').lang || 'es' : 'es';
 
-  async function _saveBook() {
-    const title = Utils.el('bk-title')?.value?.trim();
-    if (!title) { toast('Ingresa un título'); return; }
-    const author = Utils.el('bk-author')?.value?.trim();
-    const emoji = Utils.el('bk-emoji')?.value?.trim() || '📖';
-    const files = window._bkPendingFiles || {};
-    const user = State.get('profile');
-    const coupleId = AppAuth.currentCoupleId();
+    if (!title) { if (window.toast) toast(lang==='ru'?'Введите название':'Ingresá un título'); return; }
 
-    const tmpId = Utils.uid();
-    let book = {
-      id: tmpId,
-      title, author, emoji,
-      file_url: null, file_url_translated: null,
-      progress_pct: 0,
-      created_by: user?.id,
-      created_at: new Date().toISOString()
-    };
+    var coupleId = AppAuth.currentCoupleId();
+    if (!coupleId) { if (window.toast) toast('⚠️ Sin pareja'); return; }
 
-    toast('Guardando...');
-
-    // Try upload to Supabase
-    try {
-      if (files.es) {
-        const path = `${tmpId}_es.${files.es.name.split('.').pop()}`;
-        book.file_url = await DB.uploadFile('pdfs', path, files.es);
-      }
-      if (files.ru) {
-        const path = `${tmpId}_ru.${files.ru.name.split('.').pop()}`;
-        book.file_url_translated = await DB.uploadFile('pdfs', path, files.ru);
-      }
-    } catch (uploadErr) {
-      console.warn('Upload failed, using local files:', uploadErr);
-    }
-
-    // Store local file refs
-    _localFiles[tmpId] = files;
+    var btn = document.querySelector('#modal-overlay .btn-primary');
+    if (btn) { btn.textContent = lang==='ru'?'Сохраняю...':'Guardando...'; btn.disabled = true; }
 
     try {
-      const saved = await DB.insert('books', book);
-      _books.unshift(saved);
-      // Also keep local files under saved id
-      if (saved.id !== tmpId) _localFiles[saved.id] = files;
-    } catch {
-      _books.unshift(book);
-    }
+      var fileUrl = null;
+      if (file) {
+        try {
+          var path = coupleId + '/' + Date.now() + '-' + file.name;
+          fileUrl = await DB.uploadFile('pdfs', path, file);
+        } catch (e) {
+          console.warn('upload failed, saving without file:', e);
+        }
+      }
 
-    Modal.close();
-    toast('📚 Libro agregado');
-    _render(window._libContainer);
+      var book = await DB.insert('books', {
+        couple_id: coupleId,
+        title: title,
+        author: author,
+        emoji: '📖',
+        file_url: fileUrl,
+        progress_pct: 0,
+        created_by: State.get('user') ? State.get('user').id : null
+      });
+
+      Modal.close();
+      if (window.toast) toast(lang==='ru'?'📚 Книга добавлена':'📚 Libro agregado');
+
+      // Open reader directly
+      State.set('currentBook', book);
+      try { await DB.setSetting(coupleId, 'current_book_id', book.id); } catch {}
+      Router.go('reader');
+    } catch (e) {
+      if (window.toast) toast('⚠️ ' + e.message);
+      if (btn) { btn.textContent = lang==='ru'?'💾 Сохранить':'💾 Guardar'; btn.disabled = false; }
+    }
   }
 
-  return { init, _showAddModal, _fileSelected, _saveBook, _openBook };
+  return { init, _open, _showAdd, _save };
 })();
 
 
@@ -3263,6 +3307,8 @@ const PageMusic = (() => {
   }
 
   async function _loadAndRender(container) {
+    const cached = State.cache('music');
+    if (cached) { _playlist = cached; _render(container); return; }
     const coupleId = AppAuth.currentCoupleId();
     if (coupleId) {
       try {
@@ -3272,6 +3318,7 @@ const PageMusic = (() => {
           note: '🎵', yt: r.url?.startsWith('yt:') ? r.url.slice(3) : null,
           url: r.url?.startsWith('yt:') ? null : r.url
         }));
+        State.cache('music', _playlist);
       } catch { _playlist = []; }
     }
     _render(container);
@@ -4058,121 +4105,128 @@ const PageTranslate = (() => {
 
 // ── STATS PAGE ────────────────────────────────────────────────────────────────
 const PageStats = (() => {
-  async function init(container) {
-    const lang = State.get('profile')?.lang || 'es';
-    container.innerHTML = `
-      <div class="page-title display">${lang==='ru'?'Статистика 📊':'Estadísticas 📊'}</div>
-      <div class="page-sub">${lang==='ru'?'Ваше путешествие в цифрах':'Nuestro viaje en números'}</div>
-      <div style="padding:20px;text-align:center"><div class="spinner"></div></div>`;
 
-    const coupleId = AppAuth.currentCoupleId();
-    if (!coupleId) { _renderStats(container, {}); return; }
+  async function init(container) {
+    var lang = State.get('profile') ? State.get('profile').lang || 'es' : 'es';
+    container.innerHTML =
+      '<div class="page-title display">' + (lang==='ru'?'Статистика 📊':'Estadísticas 📊') + '</div>' +
+      '<div style="padding:30px;text-align:center"><div class="spinner"></div></div>';
+
+    var coupleId = AppAuth.currentCoupleId();
+    if (!coupleId) { _render(container, {}, lang); return; }
 
     try {
-      const [msgs, diary, books, members, couple] = await Promise.all([
+      var results = await Promise.all([
         DB.get('messages', { eq: [['couple_id', coupleId]], select: 'id,user_id,created_at' }),
         DB.get('diary',    { eq: [['couple_id', coupleId]], select: 'id,user_id' }),
-        DB.get('books',    { eq: [['couple_id', coupleId]], select: 'id,progress_pct,title' }),
-        DB.get('couple_members', { eqOne: ['couple_id', coupleId] }),
-        DB.get('couples', { eqOne: ['id', coupleId] }),
+        DB.get('books',    { eq: [['couple_id', coupleId]], select: 'id,progress_pct,title,author' }),
+        DB.get('couples',  { eqOne: ['id', coupleId] }),
       ]);
 
-      const coupleData  = couple[0] || {};
-      const daysTogether = coupleData.met_date
+      var msgs    = results[0];
+      var diary   = results[1];
+      var books   = results[2];
+      var couples = results[3];
+      var coupleData = couples[0] || {};
+      var myId = State.get('profile') ? State.get('profile').id : null;
+
+      var daysTogether = coupleData.met_date
         ? Math.max(0, Math.floor((new Date() - new Date(coupleData.met_date)) / 86400000))
-        : 0;
-      const daysUntil = coupleData.meeting_date
+        : null;
+      var daysUntil = coupleData.meeting_date
         ? Math.max(0, Math.floor((new Date(coupleData.meeting_date) - new Date()) / 86400000))
         : null;
-      const myId         = State.get('profile')?.id;
 
-      _renderStats(container, {
-        daysTogether, daysUntil,
-        totalMsgs:   msgs.length,
-        myMsgs:      msgs.filter(m => m.user_id === myId).length,
-        totalDiary:  diary.length,
-        myDiary:     diary.filter(d => d.user_id === myId).length,
-        totalBooks:  books.length,
-        booksRead:   books.filter(b => b.progress_pct >= 100).length,
-        streak:      KM?.streak || 0,
-        km:          KM?._total || 0,
-        members,
-        books,
-        lang,
-      });
+      _render(container, {
+        daysTogether: daysTogether,
+        daysUntil: daysUntil,
+        totalMsgs:  msgs.length,
+        myMsgs:     myId ? msgs.filter(function(m) { return m.user_id === myId; }).length : 0,
+        totalDiary: diary.length,
+        myDiary:    myId ? diary.filter(function(d) { return d.user_id === myId; }).length : 0,
+        totalBooks: books.length,
+        booksRead:  books.filter(function(b) { return b.progress_pct >= 100; }).length,
+        streak:     KM ? KM.streak : 0,
+        km:         KM ? KM._total : 0,
+        books:      books,
+      }, lang);
     } catch (e) {
-      console.error('stats error', e);
-      _renderStats(container, { error: e.message });
+      console.error('stats', e);
+      container.innerHTML =
+        '<div class="page-title display">' + (lang==='ru'?'Статистика 📊':'Estadísticas 📊') + '</div>' +
+        '<div style="padding:20px;color:var(--rose);font-size:.85rem">⚠️ ' + e.message + '</div>';
     }
   }
 
-  function _renderStats(container, d) {
-    const lang = d.lang || 'es';
-    if (d.error) {
-      container.innerHTML = `<div class="page-title display">Stats</div><div style="padding:20px;color:var(--rose);font-size:.85rem">⚠️ ${d.error}</div>`;
-      return;
+  function _render(container, d, lang) {
+    var lv = KM ? KM.level() : { ico:'🌱', name:'Despegando', next:1 };
+    var km = KM ? KM._total : 0;
+    var pct = lv.next ? Math.min(100, km / lv.next * 100) : 100;
+
+    var html =
+      '<div class="page-title display">' + (lang==='ru'?'Статистика 📊':'Estadísticas 📊') + '</div>' +
+      '<div class="page-sub">' + (lang==='ru'?'Ваше путешествие в цифрах':'Nuestro viaje en números') + '</div>';
+
+    // KM card
+    html +=
+      '<div class="card" style="background:linear-gradient(135deg,rgba(126,200,227,.1),rgba(167,139,250,.08));border-color:rgba(126,200,227,.2);text-align:center;padding:20px">' +
+        '<div style="font-size:2.5rem;margin-bottom:6px">' + lv.ico + '</div>' +
+        '<div class="display" style="font-size:1.8rem;font-weight:300;color:var(--ice)">' + (KM ? KM.fmt() : '0km') + '</div>' +
+        '<div style="font-size:.78rem;color:var(--muted);margin-bottom:10px">' + lv.name + '</div>' +
+        (lv.next ?
+          '<div style="height:6px;background:var(--surface2);border-radius:3px;overflow:hidden">' +
+            '<div style="height:100%;width:' + pct + '%;background:linear-gradient(90deg,var(--ice),var(--lav));border-radius:3px"></div>' +
+          '</div>' +
+          '<div style="font-size:.65rem;color:var(--muted);margin-top:4px">' + km.toFixed(1) + ' / ' + lv.next + ' km</div>'
+        : '') +
+      '</div>';
+
+    // Stats grid
+    html += '<div class="stats-grid">';
+    var items = [
+      [d.daysTogether !== null && d.daysTogether !== undefined ? d.daysTogether : '—', lang==='ru'?'дней вместе':'días juntos', 'var(--amber)'],
+      [d.streak !== undefined ? d.streak : '—', lang==='ru'?'серия 🔥':'racha 🔥', 'var(--rose)'],
+      [d.totalMsgs !== undefined ? d.totalMsgs : '—', lang==='ru'?'сообщений':'mensajes', 'var(--ice)'],
+      [d.totalDiary !== undefined ? d.totalDiary : '—', lang==='ru'?'дневник':'diario', 'var(--mint)'],
+      [d.totalBooks !== undefined ? d.totalBooks : '—', lang==='ru'?'книги 📚':'libros 📚', 'var(--lav)'],
+      [d.daysUntil !== null && d.daysUntil !== undefined ? d.daysUntil : '—', lang==='ru'?'дней до встречи ✈️':'días para vernos ✈️', 'var(--amber)'],
+    ];
+    items.forEach(function(item) {
+      html +=
+        '<div class="stat-card">' +
+          '<div class="stat-num display" style="color:' + item[2] + '">' + item[0] + '</div>' +
+          '<div class="stat-label">' + item[1] + '</div>' +
+        '</div>';
+    });
+    html += '</div>';
+
+    // Books progress
+    if (d.books && d.books.length > 0) {
+      html += '<div class="section-label">' + (lang==='ru'?'Прогресс чтения':'Progreso de lectura') + '</div>';
+      d.books.forEach(function(b) {
+        html +=
+          '<div class="card" style="display:flex;align-items:center;gap:12px;margin-bottom:8px;cursor:pointer" onclick="Router.go(\'reader\')">' +
+            '<div style="font-size:1.4rem;width:42px;height:42px;background:var(--surface2);border-radius:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0">📖</div>' +
+            '<div style="flex:1;min-width:0">' +
+              '<div style="font-size:.85rem;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + Utils.escHtml(b.title||'') + '</div>' +
+              '<div style="height:5px;background:var(--surface2);border-radius:3px;margin-top:6px;overflow:hidden">' +
+                '<div style="height:100%;width:' + (b.progress_pct||0) + '%;background:linear-gradient(90deg,var(--amber),var(--rose));border-radius:3px"></div>' +
+              '</div>' +
+              '<div style="font-size:.62rem;color:var(--muted);margin-top:3px">' + (b.progress_pct||0) + '%</div>' +
+            '</div>' +
+          '</div>';
+      });
     }
 
-    const lv = KM?.level() || { ico:'🌱', name:'Despegando', next:1 };
+    // If no dates set, prompt
+    if (d.daysTogether === null || d.daysTogether === undefined) {
+      html +=
+        '<div class="card" style="text-align:center;cursor:pointer;border-style:dashed" onclick="Router.go(\'config\')">' +
+          '<div style="font-size:.88rem;color:var(--amber)">⚙️ ' + (lang==='ru'?'Настрой даты в Настройках →':'Configurá las fechas en Ajustes →') + '</div>' +
+        '</div>';
+    }
 
-    container.innerHTML = `
-      <div class="page-title display">${lang==='ru'?'Статистика 📊':'Estadísticas 📊'}</div>
-      <div class="page-sub">${lang==='ru'?'Ваше путешествие':'Nuestro viaje'}</div>
-
-      <!-- KM Level card -->
-      <div class="card" style="background:linear-gradient(135deg,rgba(126,200,227,.1),rgba(167,139,250,.08));border-color:rgba(126,200,227,.2);text-align:center;padding:20px">
-        <div style="font-size:2.5rem;margin-bottom:6px">${lv.ico}</div>
-        <div class="display" style="font-size:1.8rem;font-weight:300;color:var(--ice)">${KM?.fmt() || '0km'}</div>
-        <div style="font-size:.78rem;color:var(--muted);margin-bottom:10px">${lv.name}</div>
-        ${lv.next ? `
-        <div style="height:6px;background:var(--surface2);border-radius:3px;overflow:hidden">
-          <div style="height:100%;width:${Math.min(100,(KM?._total||0)/lv.next*100)}%;background:linear-gradient(90deg,var(--ice),var(--lav));border-radius:3px"></div>
-        </div>
-        <div style="font-size:.65rem;color:var(--muted);margin-top:4px">${(KM?._total||0).toFixed(1)} / ${lv.next} km</div>` : ''}
-      </div>
-
-      <!-- Stats grid -->
-      <div class="stats-grid">
-        <div class="stat-card">
-          <div class="stat-num display" style="color:var(--amber)">${d.daysTogether ?? '—'}</div>
-          <div class="stat-label">${lang==='ru'?'дней вместе':'días juntos'}</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-num display" style="color:var(--rose)">${d.streak ?? '—'}</div>
-          <div class="stat-label">${lang==='ru'?'серия 🔥':'racha 🔥'}</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-num display" style="color:var(--ice)">${d.totalMsgs ?? '—'}</div>
-          <div class="stat-label">${lang==='ru'?'сообщений':'mensajes'}</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-num display" style="color:var(--mint)">${d.totalDiary ?? '—'}</div>
-          <div class="stat-label">${lang==='ru'?'дневник':'diario'}</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-num display" style="color:var(--lav)">${d.totalBooks ?? '—'}</div>
-          <div class="stat-label">${lang==='ru'?'книги 📚':'libros 📚'}</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-num display" style="color:var(--amber)">${d.daysUntil ?? '—'}</div>
-          <div class="stat-label">${lang==='ru'?'дней до встречи ✈️':'días para vernos ✈️'}</div>
-        </div>
-      </div>
-
-      ${d.books?.length ? `
-      <div class="section-label">${lang==='ru'?'Прогресс чтения':'Progreso de lectura'}</div>
-      ${d.books.map(b => `
-        <div class="card" style="display:flex;align-items:center;gap:12px;margin-bottom:8px">
-          <div style="font-size:1.4rem;width:42px;height:42px;background:var(--surface2);border-radius:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0">📖</div>
-          <div style="flex:1;min-width:0">
-            <div style="font-size:.85rem;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${Utils.escHtml(b.title)}</div>
-            <div style="height:5px;background:var(--surface2);border-radius:3px;margin-top:6px;overflow:hidden">
-              <div style="height:100%;width:${b.progress_pct||0}%;background:linear-gradient(90deg,var(--amber),var(--rose));border-radius:3px"></div>
-            </div>
-            <div style="font-size:.62rem;color:var(--muted);margin-top:3px">${b.progress_pct||0}%</div>
-          </div>
-        </div>`).join('')}` : ''}
-    `;
+    container.innerHTML = html;
   }
 
   return { init };
@@ -4289,6 +4343,30 @@ const PageChallenges = (() => {
 
 // ── CONFIG PAGE ───────────────────────────────────────────────────────────────
 const PageConfig = (() => {
+  const TIMEZONES = [
+    { tz:'America/Montevideo', label:'🇺🇾 Montevideo (UY)' },
+    { tz:'America/Buenos_Aires', label:'🇦🇷 Buenos Aires (AR)' },
+    { tz:'America/Sao_Paulo', label:'🇧🇷 São Paulo (BR)' },
+    { tz:'America/New_York', label:'🇺🇸 Nueva York (US)' },
+    { tz:'America/Los_Angeles', label:'🇺🇸 Los Angeles (US)' },
+    { tz:'America/Mexico_City', label:'🇲🇽 Ciudad de México (MX)' },
+    { tz:'America/Bogota', label:'🇨🇴 Bogotá (CO)' },
+    { tz:'America/Lima', label:'🇵🇪 Lima (PE)' },
+    { tz:'America/Santiago', label:'🇨🇱 Santiago (CL)' },
+    { tz:'Europe/Madrid', label:'🇪🇸 Madrid (ES)' },
+    { tz:'Europe/London', label:'🇬🇧 Londres (GB)' },
+    { tz:'Europe/Paris', label:'🇫🇷 París (FR)' },
+    { tz:'Europe/Berlin', label:'🇩🇪 Berlín (DE)' },
+    { tz:'Europe/Moscow', label:'🇷🇺 Moscú (RU)' },
+    { tz:'Europe/Samara', label:'🇷🇺 Ижевск / Самара (RU)' },
+    { tz:'Asia/Yekaterinburg', label:'🇷🇺 Екатеринбург (RU)' },
+    { tz:'Asia/Novosibirsk', label:'🇷🇺 Новосибирск (RU)' },
+    { tz:'Asia/Tokyo', label:'🇯🇵 Tokio (JP)' },
+    { tz:'Asia/Shanghai', label:'🇨🇳 Shanghai (CN)' },
+    { tz:'Asia/Dubai', label:'🇦🇪 Dubái (AE)' },
+    { tz:'Asia/Kolkata', label:'🇮🇳 Mumbai (IN)' },
+    { tz:'Australia/Sydney', label:'🇦🇺 Sídney (AU)' },
+  ];
   async function init(container) {
     const user    = State.get('profile');
     const couple  = State.get('couple');
@@ -4319,6 +4397,23 @@ const PageConfig = (() => {
             <button onclick="PageConfig._setLang('es')" class="btn btn-sm ${lang==='es'?'btn-primary':'btn-ghost'}" style="flex:1">🇪🇸 Español</button>
             <button onclick="PageConfig._setLang('ru')" class="btn btn-sm ${lang==='ru'?'btn-primary':'btn-ghost'}" style="flex:1">🇷🇺 Русский</button>
           </div>
+        </div>
+        <div class="form-group">
+          <label class="input-label">${lang==='ru'?'Твой часовой пояс':'Tu zona horaria'}</label>
+          <select class="input-field" id="cfg-tz" style="cursor:pointer">${tzOptions}</select>
+        </div>
+        <div class="form-group">
+          <label class="input-label">${lang==='ru'?'Твой город':'Tu ciudad'}</label>
+          <input class="input-field" id="cfg-city" value="${myCity}" placeholder="${lang==='ru'?'Например: Ижевск':'Ej: Montevideo'}">
+        </div>
+        <button class="btn btn-ghost btn-full btn-sm" style="margin-bottom:8px" onclick="PageConfig._saveProfile()">
+          ${lang==='ru'?'💾 Guardar perfil':'💾 Guardar perfil'}
+        </button>
+        <div class="form-group">
+          <label class="input-label">${lang==='ru'?'Твой часовой пояс':'Tu zona horaria'}</label>
+          <select class="input-field" id="cfg-tz" onchange="PageConfig._saveTz(this.value)">
+            ${PageConfig._tzOptions(user?.timezone)}
+          </select>
         </div>
         <button class="btn btn-danger btn-full btn-sm" style="margin-top:4px" onclick="PageConfig._signOut()">
           ${lang==='ru'?'Выйти':'Cerrar sesión'}
@@ -4376,6 +4471,33 @@ const PageConfig = (() => {
         </div>
       </div>
 
+      <div class="section-label">${lang==='ru'?'Поддержать проект':'Apoyar el proyecto'}</div>
+      <div class="card" style="text-align:center;padding:20px">
+        <div style="font-size:2rem;margin-bottom:8px">💛</div>
+        <div style="font-weight:600;font-size:.95rem;margin-bottom:8px">${lang==='ru'?'DuoLector в стадии бета':'DuoLector está en beta'}</div>
+        <div style="font-size:.78rem;color:var(--text2);line-height:1.6;margin-bottom:16px">${lang==='ru'?
+          'Мы строим это вместе. Каждая донация помогает нам расти, добавлять новые функции и объединять больше пар по всему миру. Спасибо, что ты с нами. 💛':
+          'Lo estamos construyendo juntos. Cada donación nos ayuda a crecer, agregar nuevas funciones y unir más parejas en el mundo. Gracias por estar con nosotros. 💛'}</div>
+        <div id="paypal-container-WJDEG9WTHZ5KE"></div>
+      </div>
+
+      <div class="section-label">${lang==='ru'?'Юридическое':'Legal'}</div>
+      <div class="card" style="font-size:.78rem;color:var(--text2);line-height:1.7">
+        <div style="font-weight:600;margin-bottom:8px">DuoLector · ${lang==='ru'?'Условия использования':'Términos de uso'}</div>
+        <p style="margin-bottom:8px">${lang==='ru'?
+          'Используя DuoLector, вы соглашаетесь не загружать контент, защищённый авторским правом, без разрешения. Пользователь несёт ответственность за загружаемые материалы.':
+          'Al usar DuoLector, aceptás no subir contenido con copyright sin permiso. El usuario es responsable del contenido que sube.'}</p>
+        <p style="margin-bottom:8px">${lang==='ru'?
+          'Ваши данные хранятся безопасно в Supabase. Мы не продаём и не передаём ваши личные данные третьим лицам.':
+          'Tus datos se almacenan de forma segura en Supabase. No vendemos ni compartimos tu información personal.'}</p>
+        <p>${lang==='ru'?
+          'Музыка через YouTube встроена на основе официального API YouTube. Загружаемые аудиофайлы хранятся в частном пространстве вашей пары.':
+          'La música de YouTube se incrusta mediante el API oficial de YouTube. Los archivos de audio subidos se almacenan en el espacio privado de tu pareja.'}</p>
+        <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);font-size:.7rem;color:var(--muted)">
+          DuoLector v1.0 · ${new Date().getFullYear()} · ${lang==='ru'?'Все права защищены':'Todos los derechos reservados'}
+        </div>
+      </div>
+
       <div style="padding:24px;text-align:center;font-family:'Caveat',cursive;font-size:1rem;color:var(--muted)">
         Solo para dos · DuoLector 🧡
       </div>`;
@@ -4422,6 +4544,48 @@ const PageConfig = (() => {
     }
   }
 
+  function _tzOptions(current) {
+    var zones = [
+      ['America/Montevideo','🇺🇾 Uruguay (UTC-3)'],
+      ['America/Argentina/Buenos_Aires','🇦🇷 Argentina (UTC-3)'],
+      ['America/Sao_Paulo','🇧🇷 Brasil (UTC-3)'],
+      ['America/Santiago','🇨🇱 Chile (UTC-4)'],
+      ['America/Lima','🇵🇪 Perú (UTC-5)'],
+      ['America/Bogota','🇨🇴 Colombia (UTC-5)'],
+      ['America/Mexico_City','🇲🇽 México (UTC-6)'],
+      ['America/New_York','🇺🇸 Nueva York (UTC-5)'],
+      ['America/Los_Angeles','🇺🇸 Los Angeles (UTC-8)'],
+      ['Europe/Madrid','🇪🇸 España (UTC+1)'],
+      ['Europe/Moscow','🇷🇺 Moscва (UTC+3)'],
+      ['Europe/Samara','🇷🇺 Ижевск (UTC+4)'],
+      ['Europe/London','🇬🇧 Londres (UTC+0)'],
+      ['Europe/Paris','🇫🇷 París (UTC+1)'],
+      ['Europe/Berlin','🇩🇪 Berlín (UTC+1)'],
+      ['Asia/Tokyo','🇯🇵 Tokio (UTC+9)'],
+      ['Asia/Shanghai','🇨🇳 China (UTC+8)'],
+      ['Asia/Dubai','🇦🇪 Dubai (UTC+4)'],
+      ['Asia/Yekaterinburg','🇷🇺 Екатеринбург (UTC+5)'],
+      ['Asia/Novosibirsk','🇷🇺 Новосибирск (UTC+7)'],
+      ['Australia/Sydney','🇦🇺 Sídney (UTC+11)'],
+      ['Pacific/Auckland','🇳🇿 Auckland (UTC+13)'],
+    ];
+    return zones.map(function(z) {
+      return '<option value="' + z[0] + '"' + (current===z[0]?' selected':'') + '>' + z[1] + '</option>';
+    }).join('');
+  }
+
+  async function _saveTz(tz) {
+    var user = State.get('profile');
+    if (!user) return;
+    try {
+      await DB.upsert('profiles', { id: user.id, timezone: tz }, { onConflict: 'id' });
+      State.set('profile', Object.assign({}, user, { timezone: tz }));
+      if (window.toast) toast('🕐 ' + (State.get('profile').lang==='ru'?'Часовой пояс изменён':'Zona horaria guardada'));
+    } catch (e) {
+      if (window.toast) toast('⚠️ ' + e.message);
+    }
+  }
+
   function _copyInviteLink() {
     const couple = State.get('couple');
     if (!couple) return;
@@ -4433,11 +4597,38 @@ const PageConfig = (() => {
     });
   }
 
+  async function _saveProfile() {
+    const user = State.get('profile');
+    const couple = State.get('couple');
+    if (!user) return;
+    const tz   = Utils.el('cfg-tz')?.value || 'America/Montevideo';
+    const city = Utils.el('cfg-city')?.value?.trim() || '';
+    const lang = State.get('profile')?.lang || 'es';
+    try {
+      await DB.upsert('profiles', { id: user.id, timezone: tz, city }, { onConflict: 'id' });
+      if (couple) {
+        await DB.client().from('couple_members')
+          .update({ timezone: tz, city })
+          .eq('couple_id', couple.id)
+          .eq('user_id', user.id);
+      }
+      State.set('profile', { ...user, timezone: tz, city });
+      // Update cache
+      localStorage.setItem('dl_profile', JSON.stringify(State.get('profile')));
+      if (window.toast) toast(lang==='ru'?'💾 Сохранено':'💾 Perfil guardado');
+      // Reload members
+      const members = await DB.get('couple_members', { eqOne: ['couple_id', couple?.id] });
+      State.set('members', members);
+    } catch(e) {
+      if (window.toast) toast('⚠️ ' + e.message);
+    }
+  }
+
   async function _signOut() {
     await AppAuth.signOut();
   }
 
-  return { init, _toggleTheme, _setLang, _saveDates, _copyInviteLink, _signOut };
+  return { init, _toggleTheme, _setLang, _saveDates, _copyInviteLink, _signOut, _tzOptions, _saveTz };
 })();
 
 
@@ -4622,6 +4813,35 @@ const AuthScreen = {
 };
 
 // ── CoupleSetup ───────────────────────────────────────────────────────────────
+  const TIMEZONES = [
+    { tz:'America/Montevideo', label:'🇺🇾 Montevideo (UY)', city:'Montevideo' },
+    { tz:'America/Buenos_Aires', label:'🇦🇷 Buenos Aires (AR)', city:'Buenos Aires' },
+    { tz:'America/Sao_Paulo', label:'🇧🇷 São Paulo (BR)', city:'São Paulo' },
+    { tz:'America/New_York', label:'🇺🇸 Nueva York (US)', city:'Nueva York' },
+    { tz:'America/Chicago', label:'🇺🇸 Chicago (US)', city:'Chicago' },
+    { tz:'America/Los_Angeles', label:'🇺🇸 Los Angeles (US)', city:'Los Angeles' },
+    { tz:'America/Mexico_City', label:'🇲🇽 Ciudad de México (MX)', city:'Ciudad de México' },
+    { tz:'America/Bogota', label:'🇨🇴 Bogotá (CO)', city:'Bogotá' },
+    { tz:'America/Lima', label:'🇵🇪 Lima (PE)', city:'Lima' },
+    { tz:'America/Santiago', label:'🇨🇱 Santiago (CL)', city:'Santiago' },
+    { tz:'Europe/Madrid', label:'🇪🇸 Madrid (ES)', city:'Madrid' },
+    { tz:'Europe/London', label:'🇬🇧 Londres (GB)', city:'Londres' },
+    { tz:'Europe/Paris', label:'🇫🇷 París (FR)', city:'París' },
+    { tz:'Europe/Berlin', label:'🇩🇪 Berlín (DE)', city:'Berlín' },
+    { tz:'Europe/Moscow', label:'🇷🇺 Moscú (RU)', city:'Moscú' },
+    { tz:'Europe/Samara', label:'🇷🇺 Ижевск / Самара (RU)', city:'Ижевск' },
+    { tz:'Asia/Yekaterinburg', label:'🇷🇺 Екатеринбург (RU)', city:'Екатеринбург' },
+    { tz:'Asia/Novosibirsk', label:'🇷🇺 Новосибирск (RU)', city:'Новосибирск' },
+    { tz:'Asia/Vladivostok', label:'🇷🇺 Владивосток (RU)', city:'Владивосток' },
+    { tz:'Asia/Tokyo', label:'🇯🇵 Tokio (JP)', city:'Tokio' },
+    { tz:'Asia/Shanghai', label:'🇨🇳 Shanghai (CN)', city:'Shanghai' },
+    { tz:'Asia/Dubai', label:'🇦🇪 Dubái (AE)', city:'Dubái' },
+    { tz:'Asia/Kolkata', label:'🇮🇳 Mumbai (IN)', city:'Mumbai' },
+    { tz:'Australia/Sydney', label:'🇦🇺 Sídney (AU)', city:'Sídney' },
+    { tz:'Pacific/Auckland', label:'🇳🇿 Auckland (NZ)', city:'Auckland' },
+  ];
+
+
 const CoupleSetup = {
   _tab: 'create',
   _emoji: '🧑‍✈️',
@@ -4708,8 +4928,12 @@ const CoupleSetup = {
     if (!name) { toast('Ingresá tu nombre'); return; }
     const coupleName = Utils.el('cs-couple-name')?.value?.trim() || (name + ' & pareja');
     this._setLoading(true, '✨ Crear nuestro espacio');
+    const tzEl  = Utils.el('cs-tz');
+    const tz    = tzEl ? tzEl.value : 'America/Montevideo';
+    const cityOpt = tzEl ? tzEl.options[tzEl.selectedIndex] : null;
+    const city  = cityOpt ? (cityOpt.getAttribute('data-city') || '') : '';
     try {
-      await AppAuth.createCouple(coupleName, name, this._emoji);
+      await AppAuth.createCouple(coupleName, name, this._emoji, tz, city);
       const couple = State.get('couple');
       if (couple) {
         const link = this.inviteLink(couple.invite_code);
@@ -4745,8 +4969,12 @@ const CoupleSetup = {
     if (!name) { toast('Ingresá tu nombre'); return; }
     if (!code) { toast('Ingresá el código de invitación'); return; }
     this._setLoading(true, '💛 Unirme a la pareja');
+    const tzElJ  = Utils.el('cs-tz');
+    const tzJ    = tzElJ ? tzElJ.value : 'America/Montevideo';
+    const cityOptJ = tzElJ ? tzElJ.options[tzElJ.selectedIndex] : null;
+    const cityJ  = cityOptJ ? (cityOptJ.getAttribute('data-city') || '') : '';
     try {
-      await AppAuth.joinCouple(code, name, this._emoji);
+      await AppAuth.joinCouple(code, name, this._emoji, tzJ, cityJ);
     } catch(e) {
       console.error('joinCouple:', e);
       toast('⚠️ ' + (e.message || 'Error al unirse'));
@@ -5037,6 +5265,25 @@ if(typeof toast!=="undefined")window.toast=toast;
 
 })();
 
+</script>
+<script>
+// Init PayPal button when config page is shown
+function initPayPalButton() {
+  var container = document.getElementById('paypal-container-WJDEG9WTHZ5KE');
+  if (!container || container.children.length > 0) return;
+  if (typeof paypal === 'undefined') return;
+  try {
+    paypal.HostedButtons({
+      hostedButtonId: "WJDEG9WTHZ5KE",
+    }).render("#paypal-container-WJDEG9WTHZ5KE");
+  } catch(e) { console.warn('PayPal init:', e); }
+}
+// Hook into router to init PayPal when config page loads
+var _origGo = window.Router ? Router.go.bind(Router) : null;
+document.addEventListener('DOMContentLoaded', function() {
+  // Check every 500ms if paypal container exists and init
+  setInterval(function() { initPayPalButton(); }, 500);
+});
 </script>
 </body>
 </html>
