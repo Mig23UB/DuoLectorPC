@@ -1242,7 +1242,7 @@ a{text-decoration:none;color:inherit;cursor:pointer}
       </div>
     </div>
     <div class="tb-right">
-      <a href="https://www.paypal.com/donate/?hosted_button_id=WJDEG9WTHZ5KE" target="_blank" style="font-size:.6rem;color:var(--amber);opacity:.7;text-decoration:none;padding:2px 5px;border:1px solid rgba(232,168,74,.25);border-radius:6px;white-space:nowrap;transition:opacity .2s" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='.7'" title="Support DuoLector">💛 Donate</a>
+      <a href="https://www.paypal.com/ncp/payment/WJDEG9WTHZ5KE" target="_blank" style="font-size:.6rem;color:var(--amber);opacity:.7;text-decoration:none;padding:2px 5px;border:1px solid rgba(232,168,74,.25);border-radius:6px;white-space:nowrap;transition:opacity .2s" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='.7'" title="Support DuoLector">💛 Donate</a>
       <span class="tb-days" id="tb-days" onclick="showKmDetails && showKmDetails()" style="display:none">📅 0</span>
       <span class="tb-km" id="tb-km" onclick="showKmDetails && showKmDetails()" style="display:none">✈️ 0km</span>
       <div class="notif-wrap">
@@ -1603,6 +1603,46 @@ const State = (() => {
   }
 
   return { get, set, on, hydrate, cache, invalidate, clear };
+})();
+
+
+// ── LocalCache — instant data from localStorage ───────────────────────────────
+const LocalCache = (() => {
+  const PREFIX = 'dl_cache_';
+  const TTL    = 5 * 60 * 1000; // 5 minutes
+
+  function key(name) { return PREFIX + name; }
+
+  function set(name, data) {
+    try {
+      localStorage.setItem(key(name), JSON.stringify({ data, ts: Date.now() }));
+    } catch {}
+  }
+
+  function get(name, maxAge) {
+    try {
+      const raw = localStorage.getItem(key(name));
+      if (!raw) return null;
+      const { data, ts } = JSON.parse(raw);
+      if (Date.now() - ts > (maxAge || TTL)) return null;
+      return data;
+    } catch { return null; }
+  }
+
+  function getStale(name) {
+    // Return data even if expired — better than nothing while loading
+    try {
+      const raw = localStorage.getItem(key(name));
+      if (!raw) return null;
+      return JSON.parse(raw).data;
+    } catch { return null; }
+  }
+
+  function clear(name) {
+    try { localStorage.removeItem(key(name)); } catch {}
+  }
+
+  return { set, get, getStale, clear };
 })();
 
 
@@ -2855,178 +2895,199 @@ const PageChat = (() => {
 })();
 
 
-// ── DIARY PAGE — Visual diary with paper sheets ───────────────────────────────
+// ── DIARY PAGE ────────────────────────────────────────────────────────────────
 const PageDiary = (() => {
   const MOODS = [
-    { emoji:'😍', label:'Feliz',     key:'happy' },
-    { emoji:'🥰', label:'Amor',      key:'love' },
-    { emoji:'😌', label:'Paz',       key:'calm' },
-    { emoji:'😢', label:'Triste',    key:'sad' },
-    { emoji:'🌙', label:'Nostalgia', key:'nostalgic' },
-    { emoji:'✨', label:'Mágico',    key:'magic' },
-    { emoji:'🔥', label:'Pasión',    key:'passion' },
-    { emoji:'💫', label:'Sueño',     key:'dream' },
-    { emoji:'🌸', label:'Dulce',     key:'sweet' },
-    { emoji:'🌊', label:'Libre',     key:'free' },
+    {emoji:'😍',key:'happy'},{emoji:'🥰',key:'love'},{emoji:'😌',key:'calm'},
+    {emoji:'😢',key:'sad'},{emoji:'🌙',key:'nostalgic'},{emoji:'✨',key:'magic'},
+    {emoji:'🔥',key:'passion'},{emoji:'💫',key:'dream'},{emoji:'🌸',key:'sweet'},{emoji:'🌊',key:'free'},
   ];
-
-  let _entries = [];
-  let _writing = false;
   let _selMood = 'happy';
 
-  function init(container) {
-    _writing = false;
-    _loadEntries(container);
+  function _skeleton() {
+    return '<div class="page-title display">Diary 📔</div>' +
+      '<div class="page-sub">Shared memories</div>' +
+      '<div style="padding:0 16px 16px"><div style="height:44px;background:var(--surface2);border-radius:var(--r-sm);animation:pulse 1.5s infinite"></div></div>' +
+      '<div style="padding:0 12px;display:grid;grid-template-columns:1fr 1fr;gap:8px">' +
+        Array(4).fill('<div style="height:120px;background:var(--surface2);border-radius:var(--r-sm);animation:pulse 1.5s infinite"></div>').join('') +
+      '</div>';
   }
 
-  async function _loadEntries(container) {
-    container.innerHTML = `<div style="padding:40px;text-align:center;color:var(--muted)"><div class="rdz-spinner" style="margin:0 auto 12px"></div>Cargando diario...</div>`;
+  async function init(container) {
+    const lang = State.get('profile')?.lang || 'en';
+
+    // Show stale cache instantly
+    const cached = LocalCache.getStale('diary');
+    if (cached) {
+      _render(container, cached, lang);
+    } else {
+      container.innerHTML = _skeleton();
+    }
+
+    // Load fresh in background
     const coupleId = AppAuth.currentCoupleId();
-    if (!coupleId) { _renderList(container, []); return; }
+    if (!coupleId) { _render(container, [], lang); return; }
+
     try {
-      _entries = await DB.get('diary', {
+      const entries = await DB.get('diary', {
         eq: [['couple_id', coupleId]],
         order: ['created_at', { ascending: false }]
       }) || [];
-    } catch { _entries = []; }
-    _renderList(container);
+      LocalCache.set('diary', entries);
+      _render(container, entries, lang);
+    } catch(e) {
+      console.error('diary', e);
+      if (!cached) container.innerHTML += '<div style="padding:12px 16px;color:var(--rose);font-size:.8rem">⚠️ ' + e.message + '</div>';
+    }
   }
 
-  function _renderList(container) {
-    const user = State.get('profile');
+  function _render(container, entries, lang) {
+    const user    = State.get('profile');
     const partner = State.get('partner');
+    const mine    = entries.filter(e => e.user_id === user?.id);
+    const theirs  = entries.filter(e => e.user_id !== user?.id);
 
-    // Group entries: my entries left, partner entries right
-    const mine = _entries.filter(e => e.user_id === user?.id);
-    const theirs = _entries.filter(e => e.user_id !== user?.id);
+    let html = '<div class="page-title display">' + (lang==='ru'?'Дневник 📔':'Diary 📔') + '</div>';
+    html += '<div class="page-sub">' + (lang==='ru'?'Общие воспоминания':'Shared memories') + '</div>';
+    html += '<div style="padding:0 16px 16px"><button class="btn btn-primary btn-full" onclick="PageDiary._showWrite()">' +
+      (lang==='ru'?'✏️ Новая запись':'✏️ New entry') + '</button></div>';
 
-    container.innerHTML = `
-      <div class="diary-header">
-        <div class="display" style="font-size:2rem;font-weight:300;padding:24px 20px 4px">Diario 📔</div>
-        <div style="font-size:.8rem;color:var(--muted);padding:0 20px 16px">Memorias compartidas</div>
-        <div style="padding:0 16px 16px">
-          <button class="btn btn-primary btn-full" onclick="PageDiary._showWrite()">✏️ Nueva entrada</button>
-        </div>
-      </div>
+    html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:0;padding:0 12px 20px">';
 
-      <div class="diary-two-col">
-        <div class="diary-col diary-col-mine">
-          <div class="diary-col-header" style="color:var(--amber)">
-            <span>${user?.emoji || '😊'} ${user?.display_name || 'Tus entradas'}</span>
-          </div>
-          ${mine.length ? mine.map(_entrySheet).join('') : `<div class="diary-empty-col">Aún no escribiste nada.<br>¿Cómo te sientes hoy? ✍️</div>`}
-        </div>
-        <div class="diary-col diary-col-theirs">
-          <div class="diary-col-header" style="color:var(--rose)">
-            <span>${partner?.emoji || '❤️'} ${partner?.display_name || 'Su pareja'}</span>
-          </div>
-          ${theirs.length ? theirs.map(_entrySheet).join('') : `<div class="diary-empty-col">Aún no escribió nada. 🌙</div>`}
-        </div>
-      </div>
-    `;
+    // My column
+    html += '<div style="padding-right:6px">';
+    html += '<div style="font-size:.65rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:6px 2px 6px;border-bottom:2px solid var(--amber);margin-bottom:8px;opacity:.8;color:var(--amber)">' +
+      (user?.emoji||'😊') + ' ' + (user?.display_name||'You') + '</div>';
+    if (mine.length) {
+      mine.forEach(e => { html += _card(e, true); });
+    } else {
+      html += '<div style="text-align:center;padding:20px 8px;color:var(--muted);font-family:\'Caveat\',cursive;font-size:1rem">' +
+        (lang==='ru'?'Ещё ничего не написал ✍️':'Write something today ✍️') + '</div>';
+    }
+    html += '</div>';
+
+    // Partner column
+    html += '<div style="padding-left:6px">';
+    html += '<div style="font-size:.65rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:6px 2px 6px;border-bottom:2px solid var(--rose);margin-bottom:8px;opacity:.8;color:var(--rose)">' +
+      (partner?.emoji||'❤️') + ' ' + (partner?.display_name||(lang==='ru'?'Пара':'Partner')) + '</div>';
+    if (theirs.length) {
+      theirs.forEach(e => { html += _card(e, false); });
+    } else {
+      html += '<div style="text-align:center;padding:20px 8px;color:var(--muted);font-family:\'Caveat\',cursive;font-size:1rem">' +
+        (lang==='ru'?'Ещё ничего не написала 🌙':'Nothing yet 🌙') + '</div>';
+    }
+    html += '</div>';
+
+    html += '</div>';
+    container.innerHTML = html;
   }
 
-  function _entrySheet(e) {
+  function _card(e, isMine) {
     const mood = MOODS.find(m => m.key === e.mood) || MOODS[0];
-    const isMine = e.user_id === State.get('profile')?.id;
-    const date = new Date(e.created_at);
-    return `
-      <div class="diary-sheet ${isMine ? 'mine' : 'theirs'}" onclick="PageDiary._open('${e.id}')">
-        <div class="diary-sheet-corner"></div>
-        <div class="diary-sheet-mood">${mood.emoji}</div>
-        <div class="diary-sheet-date">${date.toLocaleDateString('es',{day:'numeric',month:'short',year:'numeric'})}</div>
-        ${e.title ? `<div class="diary-sheet-title">${Utils.escHtml(e.title)}</div>` : ''}
-        <div class="diary-sheet-preview">${Utils.escHtml(e.content)}</div>
-        ${e.tags?.length ? `<div class="diary-sheet-tags">${e.tags.map(t=>`<span>#${t}</span>`).join(' ')}</div>` : ''}
-        <div class="diary-sheet-lines"></div>
-      </div>`;
+    const date = new Date(e.created_at).toLocaleDateString('en', {day:'numeric',month:'short',year:'numeric'});
+    return '<div style="background:var(--card);border:1px solid var(--border);border-left:3px solid ' +
+      (isMine?'var(--amber)':'var(--rose)') +
+      ';border-radius:3px 12px 12px 3px;padding:12px 10px;cursor:pointer;margin-bottom:8px;position:relative;overflow:hidden" onclick="PageDiary._open(\'' + e.id + '\')">' +
+      '<div style="position:absolute;top:0;right:0;width:0;height:0;border-style:solid;border-width:0 14px 14px 0;border-color:transparent var(--surface2) transparent transparent"></div>' +
+      '<div style="font-size:1.1rem;margin-bottom:3px">' + mood.emoji + '</div>' +
+      '<div style="font-size:.6rem;color:var(--muted);margin-bottom:3px">' + date + '</div>' +
+      (e.title ? '<div style="font-family:\'Cormorant Garamond\',serif;font-size:.9rem;font-weight:500;margin-bottom:4px">' + Utils.escHtml(e.title) + '</div>' : '') +
+      '<div style="font-size:.82rem;color:var(--text2);line-height:1.5;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;font-family:\'Caveat\',cursive">' +
+      Utils.escHtml(e.content) + '</div>' +
+      (e.tags?.length ? '<div style="margin-top:5px;display:flex;flex-wrap:wrap;gap:3px">' +
+        e.tags.map(t=>'<span style="font-size:.55rem;color:var(--lav);background:rgba(167,139,250,.1);border:1px solid rgba(167,139,250,.2);border-radius:20px;padding:1px 5px">#'+t+'</span>').join('') +
+      '</div>' : '') +
+      '<div style="position:absolute;bottom:0;left:0;right:0;height:2px;background:repeating-linear-gradient(90deg,var(--border) 0,var(--border) 60%,transparent 60%,transparent 100%);background-size:8px 1px"></div>' +
+    '</div>';
   }
+
+  // Store entries for _open
+  let _entries = [];
+  const _origRender = _render;
 
   function _open(id) {
-    const e = _entries.find(x => x.id === id);
+    const cached = LocalCache.getStale('diary') || [];
+    const e = cached.find(x => x.id === id);
     if (!e) return;
     const mood = MOODS.find(m => m.key === e.mood) || MOODS[0];
     Modal.show({
-      title: `${mood.emoji} ${e.title || 'Entrada del diario'}`,
-      content: `
-        <div style="font-size:.72rem;color:var(--muted);margin-bottom:14px">
-          ${e.user_emoji} ${e.user_name} · ${new Date(e.created_at).toLocaleDateString('es',{weekday:'long',day:'numeric',month:'long',year:'numeric'})}
-        </div>
-        <div style="font-family:'Caveat',cursive;font-size:1.2rem;line-height:1.8;color:var(--text);white-space:pre-wrap">${Utils.escHtml(e.content)}</div>
-        ${e.tags?.length ? `<div class="dec-tags" style="margin-top:14px">${e.tags.map(t=>`<span class="dec-tag">#${t}</span>`).join('')}</div>` : ''}
-      `
+      title: mood.emoji + ' ' + (e.title || 'Entry'),
+      content: '<div style="font-size:.7rem;color:var(--muted);margin-bottom:12px">' +
+        (e.user_emoji||'') + ' ' + (e.user_name||'') + ' · ' +
+        new Date(e.created_at).toLocaleDateString('en',{weekday:'long',day:'numeric',month:'long',year:'numeric'}) +
+        '</div>' +
+        '<div style="font-family:\'Caveat\',cursive;font-size:1.15rem;line-height:1.8;color:var(--text);white-space:pre-wrap">' +
+        Utils.escHtml(e.content) + '</div>' +
+        (e.tags?.length ? '<div style="margin-top:12px;display:flex;flex-wrap:wrap;gap:4px">' +
+          e.tags.map(t=>'<span style="font-size:.7rem;color:var(--lav);background:rgba(167,139,250,.1);border:1px solid rgba(167,139,250,.2);border-radius:20px;padding:2px 8px">#'+t+'</span>').join('') +
+        '</div>' : '')
     });
   }
 
   function _showWrite() {
+    const lang = State.get('profile')?.lang || 'en';
     _selMood = 'happy';
-    const moodOpts = MOODS.map(m =>
-      `<div class="mood-opt${m.key===_selMood?' active':''}" data-mood="${m.key}" onclick="PageDiary._pickMood('${m.key}',this)">
-        <div style="font-size:1.4rem">${m.emoji}</div>
-        <div style="font-size:.6rem;color:var(--muted)">${m.label}</div>
-      </div>`
+    const moodGrid = MOODS.map(m =>
+      '<div style="background:var(--surface);border:2px solid ' + (m.key===_selMood?'var(--amber)':'var(--border)') + ';border-radius:var(--r-sm);padding:7px 3px;text-align:center;cursor:pointer;transition:all .18s;font-size:1.3rem" ' +
+      'onclick="PageDiary._pickMood(\'' + m.key + '\',this)">' + m.emoji + '</div>'
     ).join('');
 
     Modal.show({
-      title: '✏️ Nueva entrada',
-      content: `
-        <div class="form-group">
-          <label class="input-label">¿Cómo te sientes?</label>
-          <div class="mood-grid" id="mood-grid">${moodOpts}</div>
-        </div>
-        <div class="form-group">
-          <label class="input-label">Título (opcional)</label>
-          <input class="input-field" id="entry-title" placeholder="Hoy fue un día especial...">
-        </div>
-        <div class="form-group">
-          <label class="input-label">Escribe tu entrada</label>
-          <textarea class="input-field diary-write-area" id="entry-content" placeholder="Querido diario..." style="min-height:160px;resize:vertical;line-height:1.8;font-family:'Caveat',cursive;font-size:1.1rem"></textarea>
-        </div>
-        <div class="form-group">
-          <label class="input-label">Etiquetas (separadas por coma)</label>
-          <input class="input-field" id="entry-tags" placeholder="amor, recuerdo, especial">
-        </div>
-      `,
-      footer: `<button class="btn btn-primary btn-full" onclick="PageDiary._save()">💾 Guardar entrada</button>`
+      title: lang==='ru'?'✏️ Новая запись':'✏️ New entry',
+      content: '<div class="form-group"><label class="input-label">' + (lang==='ru'?'Как ты себя чувствуешь?':'How are you feeling?') + '</label>' +
+        '<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:5px;margin-bottom:4px" id="mood-grid">' + moodGrid + '</div></div>' +
+        '<div class="form-group"><label class="input-label">' + (lang==='ru'?'Заголовок (необязательно)':'Title (optional)') + '</label>' +
+        '<input class="input-field" id="e-title" placeholder="' + (lang==='ru'?'Сегодня был особенный день...':'Today was special...') + '"></div>' +
+        '<div class="form-group"><label class="input-label">' + (lang==='ru'?'Напиши':'Write') + '</label>' +
+        '<textarea class="input-field" id="e-content" placeholder="' + (lang==='ru'?'Дорогой дневник...':'Dear diary...') + '" ' +
+        'style="min-height:140px;resize:vertical;font-family:\'Caveat\',cursive;font-size:1.1rem;line-height:1.9;background-image:repeating-linear-gradient(transparent,transparent 31px,var(--border) 31px,var(--border) 32px)"></textarea></div>' +
+        '<div class="form-group"><label class="input-label">' + (lang==='ru'?'Теги':'Tags') + '</label>' +
+        '<input class="input-field" id="e-tags" placeholder="' + (lang==='ru'?'любовь, воспоминание':'love, memory') + '"></div>',
+      footer: '<button class="btn btn-primary btn-full" onclick="PageDiary._save()">' + (lang==='ru'?'💾 Сохранить':'💾 Save entry') + '</button>'
     });
   }
 
   function _pickMood(key, el) {
     _selMood = key;
-    document.querySelectorAll('.mood-opt').forEach(e => e.classList.remove('active'));
-    if (el) el.classList.add('active');
+    document.querySelectorAll('.mood-opt').forEach(e => {
+      e.classList.remove('active');
+      e.style.borderColor = 'var(--border)';
+    });
+    if (el) { el.classList.add('active'); el.style.borderColor = 'var(--amber)'; }
   }
 
   async function _save() {
-    const title   = document.getElementById('entry-title')?.value?.trim();
-    const content = document.getElementById('entry-content')?.value?.trim();
-    const tagsRaw = document.getElementById('entry-tags')?.value?.trim();
-    if (!content) { if (window.toast) toast('Escribe algo primero'); return; }
-    const user = State.get('profile');
-    const coupleId = AppAuth.currentCoupleId();
-    if (!user || !coupleId) { if (window.toast) toast('⚠️ Sin sesión'); return; }
+    const title   = Utils.el('e-title')?.value?.trim();
+    const content = Utils.el('e-content')?.value?.trim();
+    const tagsRaw = Utils.el('e-tags')?.value?.trim();
+    if (!content) { if (window.toast) toast(State.get('profile')?.lang==='ru'?'Сначала напиши что-нибудь':'Write something first'); return; }
+    const user    = State.get('profile');
+    const coupleId= AppAuth.currentCoupleId();
+    if (!user || !coupleId) { if (window.toast) toast('⚠️ No session'); return; }
     const tags = tagsRaw ? tagsRaw.split(',').map(t => t.trim()).filter(Boolean) : [];
     try {
       const entry = await DB.insert('diary', {
-        couple_id: coupleId,
-        user_id: user.id,
-        user_name: user.display_name,
-        user_emoji: user.emoji,
-        title, content, mood: _selMood, tags,
+        couple_id: coupleId, user_id: user.id,
+        user_name: user.display_name, user_emoji: user.emoji,
+        title, content, mood: _selMood, tags
       });
-      _entries.unshift(entry);
+      // Update cache
+      const cached = LocalCache.getStale('diary') || [];
+      cached.unshift(entry);
+      LocalCache.set('diary', cached);
+      State.invalidate('diary');
       Modal.close();
+      if (window.toast) toast('📔 ' + (user.lang==='ru'?'Запись сохранена':'Entry saved'));
       if (typeof KM !== 'undefined') KM.addDiary();
-      if (window.toast) toast('📔 Entrada guardada');
       // Re-render
-      const c = document.getElementById(`page-diary`);
-      if (c) _renderList(c);
-    } catch (e) {
-      if (window.toast) toast('⚠️ Error: ' + e.message);
+      const c = document.getElementById('page-diary');
+      if (c) _render(c, cached, user.lang || 'en');
+    } catch(e) {
+      if (window.toast) toast('⚠️ ' + e.message);
     }
   }
 
-  return { init, _showWrite, _save, _pickMood, _open };
+  return { init, _open, _showWrite, _save, _pickMood };
 })();
 
 
@@ -3305,7 +3366,7 @@ const PageReader = (() => {
             '<input type="number" id="pg-b" class="reader-page-input" value="1" min="1" onchange="PageReader._goTo(\'b\',+this.value)" onfocus="this.select()" style="width:48px;display:none">' +
             '<button class="reader-nav-btn" id="next-b" onclick="PageReader._go(\'b\',1)" style="display:none">›</button>' +
             '<span style="font-size:.65rem;color:var(--dim);margin-left:2px" id="tot-b"></span>' +
-            '<button id="ready-btn-b" onclick="PageReader._markReady(\'b\')" style="margin-left:auto;height:24px;padding:0 8px;border-radius:12px;background:rgba(112,200,160,.15);border:1px solid rgba(112,200,160,.3);color:var(--mint);font-size:.62rem;cursor:pointer;display:none">✓ ' + (lang==='ru'?'Готово':'Listo') + '</button>' +
+            '<button id="ready-btn-b" style="display:none!important" onclick="return false" style="margin-left:auto;height:24px;padding:0 8px;border-radius:12px;background:rgba(112,200,160,.15);border:1px solid rgba(112,200,160,.3);color:var(--mint);font-size:.62rem;cursor:pointer;display:none">✓ ' + (lang==='ru'?'Готово':'Listo') + '</button>' +
           '</div>' +
         '</div>' +
       '</div>' +
@@ -3576,16 +3637,24 @@ const PageReader = (() => {
   }
 
   async function _markReady(pane) {
-    var btn=document.getElementById('ready-btn-'+pane);
-    if(btn){btn.style.background='rgba(112,200,160,.3)';btn.textContent='✓✓';}
-    if(pane==='a') _readyA=true; else _readyB=true;
-    // Broadcast ready signal
-    var coupleId=AppAuth.currentCoupleId();
-    var userId=State.get('profile')?.id;
-    if(!coupleId||!userId) return;
+    // Only allow marking OWN pane (pane 'a' = me)
+    if (pane !== _myPane) return;
+    var btn = document.getElementById('ready-btn-' + pane);
+    var already = (pane === 'a') ? _readyA : _readyB;
+    if (already) {
+      // Undo ready
+      if (pane === 'a') _readyA = false; else _readyB = false;
+      if (btn) { btn.style.background = 'rgba(112,200,160,.15)'; btn.textContent = '✓ ' + (State.get('profile')?.lang==='ru'?'Готово':'Done'); }
+      return;
+    }
+    if (btn) { btn.style.background = 'rgba(112,200,160,.35)'; btn.style.borderColor = 'var(--mint)'; btn.textContent = '✓✓ ' + (State.get('profile')?.lang==='ru'?'Готово!':'Done!'); }
+    if (pane === 'a') _readyA = true; else _readyB = true;
+    var coupleId = AppAuth.currentCoupleId();
+    var userId   = State.get('profile')?.id;
+    if (!coupleId || !userId) return;
     try {
-      await DB.setSetting(coupleId,'reader_ready',JSON.stringify({by:userId,page:S[pane].cur,ts:Date.now()}));
-      if(_channel) _channel.send({type:'broadcast',event:'ready',payload:{by:userId,page:S[pane].cur}}).catch(function(){});
+      await DB.setSetting(coupleId, 'reader_ready', JSON.stringify({by:userId, page:S[pane].cur, ts:Date.now()}));
+      if (_channel) _channel.send({type:'broadcast', event:'ready', payload:{by:userId, page:S[pane].cur}}).catch(function(){});
     } catch {}
   }
 
@@ -3694,276 +3763,233 @@ const PageReader = (() => {
 })();
 
 
-// ── MUSIC PAGE — YouTube embed + local audio upload ───────────────────────────
+// ── MUSIC PAGE ────────────────────────────────────────────────────────────────
 const PageMusic = (() => {
-
-  // Couple's playlist — persists in Supabase via music table
-  // Format: { id, title, artist, note, yt (videoId), url (audio URL from storage) }
   let _playlist = [];
   let _idx = 0;
-  let _playing = false;
 
-  function init(container) {
-    container.style.padding = '0';
-    container.style.overflow = 'hidden';
-    container.style.position = 'absolute';
-    container.style.inset = '0';
-    container.style.display = 'flex';
-    container.style.flexDirection = 'column';
-    _loadAndRender(container);
+  function _skeleton() {
+    return '<div class="page-title display">Music 🎵</div><div class="page-sub">Your shared playlist</div>' +
+      '<div style="margin:0 16px 12px;height:200px;background:var(--surface2);border-radius:var(--r);animation:pulse 1.5s infinite"></div>' +
+      '<div style="padding:0 16px;display:flex;flex-direction:column;gap:8px">' +
+        Array(3).fill('<div style="height:58px;background:var(--surface2);border-radius:var(--r-sm);animation:pulse 1.5s infinite"></div>').join('') +
+      '</div>';
   }
 
-  async function _loadAndRender(container) {
-    const cached = State.cache('music');
-    if (cached) { _playlist = cached; _render(container); return; }
+  async function init(container) {
+    const lang = State.get('profile')?.lang || 'en';
+
+    // Show stale cache instantly
+    const cached = LocalCache.getStale('music');
+    if (cached) {
+      _playlist = cached;
+      _render(container, lang);
+    } else {
+      container.innerHTML = _skeleton();
+    }
+
     const coupleId = AppAuth.currentCoupleId();
     if (coupleId) {
       try {
-        const rows = await DB.get('music', { eqOne: ['couple_id', coupleId] });
-        _playlist = (rows || []).map(r => ({
-          id: r.id, title: r.title, artist: r.artist || '',
-          note: '🎵', yt: r.url?.startsWith('yt:') ? r.url.slice(3) : null,
+        const rows = await DB.get('music', { eq: [['couple_id', coupleId]], order: ['created_at', {ascending:false}] });
+        _playlist = (rows||[]).map(r => ({
+          id: r.id, title: r.title, artist: r.artist||'',
+          note: '🎵',
+          yt: r.url?.startsWith('yt:') ? r.url.slice(3) : null,
           url: r.url?.startsWith('yt:') ? null : r.url
         }));
-        State.cache('music', _playlist);
-      } catch { _playlist = []; }
+        LocalCache.set('music', _playlist);
+        _render(container, lang);
+      } catch(e) {
+        console.error('music', e);
+        if (!cached) _render(container, lang);
+      }
+    } else {
+      _render(container, lang);
     }
-    _render(container);
   }
 
-  function _render(c) {
+  function _render(c, lang) {
     const cur = _playlist[_idx] || null;
-    c.innerHTML = `
-      <div style="flex:1;overflow-y:auto;padding-bottom:8px">
-        <div class="page-title display">Música 🎵</div>
-        <div class="page-sub">La playlist de los dos</div>
+    let html = '<div class="page-title display">' + (lang==='ru'?'Музыка 🎵':'Music 🎵') + '</div>';
+    html += '<div class="page-sub">' + (lang==='ru'?'Ваш общий плейлист':'Your shared playlist') + '</div>';
 
-        <!-- YouTube player -->
-        <div id="yt-wrap" style="margin:0 16px 12px;border-radius:var(--r);overflow:hidden;background:#000;aspect-ratio:16/9;${cur?.yt?'':'display:none'}">
-          <iframe id="yt-iframe" src="${cur?.yt?'https://www.youtube.com/embed/'+cur.yt+'?autoplay=0&rel=0&modestbranding=1':''}"
-            style="width:100%;height:100%;border:none" allow="autoplay;encrypted-media" allowfullscreen></iframe>
-        </div>
+    // YouTube player
+    if (cur?.yt) {
+      html += '<div style="margin:0 16px 10px;border-radius:var(--r);overflow:hidden;background:#000;aspect-ratio:16/9">' +
+        '<iframe id="yt-iframe" src="https://www.youtube.com/embed/' + cur.yt + '?autoplay=0&rel=0&modestbranding=1" style="width:100%;height:100%;border:none" allow="autoplay;encrypted-media" allowfullscreen></iframe></div>';
+    }
 
-        <!-- Audio player -->
-        <div id="audio-wrap" style="margin:0 16px 12px;background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:16px;${cur&&!cur.yt?'':'display:none'}">
-          <audio id="audio-el" controls style="width:100%;accent-color:var(--amber);height:36px"></audio>
-          <div id="audio-label" style="font-size:.72rem;color:var(--muted);margin-top:8px;text-align:center">${cur&&!cur.yt?cur.title:''}</div>
-        </div>
+    // Audio player
+    if (cur && !cur.yt && cur.url) {
+      html += '<div style="margin:0 16px 10px;background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:14px">' +
+        '<audio id="audio-el" controls style="width:100%;accent-color:var(--amber);height:36px" src="' + cur.url + '"></audio>' +
+        '<div style="font-size:.72rem;color:var(--muted);margin-top:6px;text-align:center">' + Utils.escHtml(cur.title) + '</div>' +
+      '</div>';
+    }
 
-        <!-- Now playing -->
-        <div class="card" style="background:linear-gradient(135deg,rgba(232,168,74,.08),rgba(224,120,144,.06));border-color:rgba(232,168,74,.2)">
-          <div style="display:flex;align-items:center;gap:12px">
-            <div style="font-size:2rem;flex-shrink:0">${cur?cur.note:'🎵'}</div>
-            <div style="flex:1;min-width:0">
-              ${cur
-                ? `<div style="font-weight:600;font-size:.95rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${Utils.escHtml(cur.title)}</div>
-                   <div style="font-size:.75rem;color:var(--muted)">${cur.yt?Utils.escHtml(cur.artist||'YouTube'):'🎵 Audio'}</div>`
-                : `<div style="font-size:.88rem;color:var(--muted)">Sin canciones aún</div>
-                   <div style="font-size:.72rem;color:var(--dim)">Agregá YouTube o subí un audio</div>`}
-            </div>
-            ${cur ? `
-            <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
-              <button onclick="PageMusic._prev()" style="width:32px;height:32px;background:var(--surface2);border-radius:50%;display:flex;align-items:center;justify-content:center;color:var(--text2);cursor:pointer;border:none">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><polygon points="19,20 9,12 19,4"/><line x1="5" y1="4" x2="5" y2="20" stroke="currentColor" stroke-width="2"/></svg>
-              </button>
-              <button onclick="PageMusic._play()" style="width:44px;height:44px;background:var(--amber);border-radius:50%;display:flex;align-items:center;justify-content:center;color:#000;cursor:pointer;font-size:1.1rem;border:none;flex-shrink:0" id="mp-page-btn">▶</button>
-              <button onclick="PageMusic._next()" style="width:32px;height:32px;background:var(--surface2);border-radius:50%;display:flex;align-items:center;justify-content:center;color:var(--text2);cursor:pointer;border:none">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,4 15,12 5,20"/><line x1="19" y1="4" x2="19" y2="20" stroke="currentColor" stroke-width="2"/></svg>
-              </button>
-            </div>` : ''}
-          </div>
-        </div>
+    // Now playing / empty
+    html += '<div class="card" style="background:linear-gradient(135deg,rgba(232,168,74,.08),rgba(224,120,144,.06));border-color:rgba(232,168,74,.2);margin-bottom:10px">';
+    html += '<div style="display:flex;align-items:center;gap:12px">';
+    html += '<div style="font-size:1.8rem">' + (cur?cur.note:'🎵') + '</div>';
+    html += '<div style="flex:1;min-width:0">';
+    if (cur) {
+      html += '<div style="font-weight:600;font-size:.95rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + Utils.escHtml(cur.title) + '</div>';
+      html += '<div style="font-size:.72rem;color:var(--muted)">' + (cur.yt?Utils.escHtml(cur.artist||'YouTube'):'🎵 Audio') + '</div>';
+    } else {
+      html += '<div style="font-size:.85rem;color:var(--muted)">' + (lang==='ru'?'Плейлист пуст':'Playlist is empty') + '</div>';
+      html += '<div style="font-size:.72rem;color:var(--dim)">' + (lang==='ru'?'Добавь YouTube или аудио':'Add YouTube or upload audio') + '</div>';
+    }
+    html += '</div>';
+    if (cur) {
+      html += '<div style="display:flex;align-items:center;gap:6px;flex-shrink:0">';
+      html += '<button onclick="PageMusic._prev()" style="width:30px;height:30px;background:var(--surface2);border-radius:50%;border:none;cursor:pointer;color:var(--text2);display:flex;align-items:center;justify-content:center">◀</button>';
+      html += '<button onclick="PageMusic._play()" style="width:40px;height:40px;background:var(--amber);border-radius:50%;border:none;cursor:pointer;color:#000;font-size:1rem;display:flex;align-items:center;justify-content:center" id="mp-play-btn">▶</button>';
+      html += '<button onclick="PageMusic._next()" style="width:30px;height:30px;background:var(--surface2);border-radius:50%;border:none;cursor:pointer;color:var(--text2);display:flex;align-items:center;justify-content:center">▶▶</button>';
+      html += '</div>';
+    }
+    html += '</div></div>';
 
-        <!-- Playlist -->
-        ${_playlist.length > 0 ? `
-        <div class="section-label">Playlist · ${_playlist.length} canción${_playlist.length!==1?'es':''}</div>
-        <div id="mp-list">
-          ${_playlist.map((t,i) => `
-          <div class="card" style="display:flex;align-items:center;gap:12px;cursor:pointer;margin-bottom:6px;transition:all .18s;${i===_idx?'border-color:var(--amber);background:var(--amber-s)':''}" onclick="PageMusic._goto(${i})">
-            <div style="width:36px;height:36px;background:var(--surface2);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:1rem;flex-shrink:0">${t.note}</div>
-            <div style="flex:1;min-width:0">
-              <div style="font-size:.88rem;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${Utils.escHtml(t.title)}</div>
-              <div style="font-size:.7rem;color:var(--muted)">${t.yt?'▶ YouTube':'🎵 Audio'}</div>
-            </div>
-            <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
-              ${i===_idx?'<span style="font-size:.65rem;color:var(--amber);font-weight:600">▶ NOW</span>':'<span style="font-size:.65rem;color:var(--muted)">'+(i+1)+'</span>'}
-              <button onclick="event.stopPropagation();PageMusic._remove(${i})" style="width:22px;height:22px;border-radius:50%;background:var(--surface2);border:none;color:var(--muted);font-size:.6rem;cursor:pointer;display:flex;align-items:center;justify-content:center">✕</button>
-            </div>
-          </div>`).join('')}
-        </div>` : `
-        <div style="padding:24px 20px;text-align:center">
-          <div style="font-size:3rem;margin-bottom:12px;opacity:.3">🎵</div>
-          <div style="font-size:.9rem;color:var(--muted);margin-bottom:4px">Tu playlist está vacía</div>
-          <div style="font-size:.78rem;color:var(--dim)">Agregá canciones de YouTube o subí tus propios audios</div>
-        </div>`}
+    // Playlist
+    if (_playlist.length > 0) {
+      html += '<div class="section-label">' + (lang==='ru'?'Плейлист · ':'Playlist · ') + _playlist.length + ' ' + (lang==='ru'?(_playlist.length===1?'трек':'треков'):'track' + (_playlist.length!==1?'s':'')) + '</div>';
+      _playlist.forEach(function(t, i) {
+        html += '<div class="card" style="display:flex;align-items:center;gap:10px;cursor:pointer;margin-bottom:6px;' +
+          (i===_idx?'border-color:var(--amber);background:var(--amber-s)':'') +
+          '" onclick="PageMusic._goto(' + i + ')">' +
+          '<div style="width:36px;height:36px;background:var(--surface2);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:1rem;flex-shrink:0">' + t.note + '</div>' +
+          '<div style="flex:1;min-width:0"><div style="font-size:.85rem;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + Utils.escHtml(t.title) + '</div>' +
+          '<div style="font-size:.68rem;color:var(--muted)">' + (t.yt?'▶ YouTube':'🎵 Audio') + '</div></div>' +
+          '<div style="display:flex;align-items:center;gap:5px;flex-shrink:0">' +
+          (i===_idx?'<span style="font-size:.6rem;color:var(--amber);font-weight:700">▶</span>':'<span style="font-size:.6rem;color:var(--muted)">'+(i+1)+'</span>') +
+          '<button onclick="event.stopPropagation();PageMusic._remove(' + i + ')" style="width:20px;height:20px;border-radius:50%;background:var(--surface2);border:none;color:var(--muted);font-size:.55rem;cursor:pointer">✕</button>' +
+          '</div></div>';
+      });
+    } else {
+      html += '<div style="padding:20px;text-align:center"><div style="font-size:2.5rem;opacity:.25;margin-bottom:10px">🎵</div>' +
+        '<div style="font-size:.85rem;color:var(--muted)">' + (lang==='ru'?'Плейлист пуст':'Your playlist is empty') + '</div></div>';
+    }
 
-        <!-- Add YouTube -->
-        <div style="padding:4px 16px 8px">
-          <button class="btn btn-ghost btn-full" onclick="PageMusic._showYtModal()" style="gap:8px">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22.54 6.42a2.78 2.78 0 0 0-1.95-1.96C18.88 4 12 4 12 4s-6.88 0-8.59.46A2.78 2.78 0 0 0 1.46 6.42 29 29 0 0 0 1 12a29 29 0 0 0 .46 5.58A2.78 2.78 0 0 0 3.41 19.6C5.12 20 12 20 12 20s6.88 0 8.59-.46a2.78 2.78 0 0 0 1.95-1.95A29 29 0 0 0 23 12a29 29 0 0 0-.46-5.58z"/><polygon points="9.75,15.02 15.5,12 9.75,8.98" fill="currentColor" stroke="none"/></svg>
-            Agregar desde YouTube
-          </button>
-        </div>
+    // Add YouTube button
+    html += '<div style="padding:4px 16px 8px"><button class="btn btn-ghost btn-full" onclick="PageMusic._showYtModal()" style="gap:8px">' +
+      '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22.54 6.42a2.78 2.78 0 0 0-1.95-1.96C18.88 4 12 4 12 4s-6.88 0-8.59.46A2.78 2.78 0 0 0 1.46 6.42 29 29 0 0 0 1 12a29 29 0 0 0 .46 5.58A2.78 2.78 0 0 0 3.41 19.6C5.12 20 12 20 12 20s6.88 0 8.59-.46a2.78 2.78 0 0 0 1.95-1.95A29 29 0 0 0 23 12a29 29 0 0 0-.46-5.58z"/><polygon points="9.75,15.02 15.5,12 9.75,8.98" fill="currentColor" stroke="none"/></svg>' +
+      (lang==='ru'?'Добавить YouTube':'Add from YouTube') + '</button></div>';
 
-        <!-- Upload audio -->
-        <div style="padding:0 16px 20px">
-          <div style="background:var(--card);border:1.5px dashed var(--border2);border-radius:var(--r);padding:20px;text-align:center;cursor:pointer;transition:all .2s"
-               onclick="document.getElementById('mp-file-in').click()"
-               ondragover="event.preventDefault();this.style.borderColor='var(--amber)'"
-               ondragleave="this.style.borderColor=''"
-               ondrop="event.preventDefault();this.style.borderColor='';PageMusic._dropAudio(event)">
-            <div style="font-size:2rem;margin-bottom:8px;opacity:.4">🎵</div>
-            <div style="font-size:.88rem;font-weight:500;color:var(--text2)">Subir audio</div>
-            <div style="font-size:.72rem;color:var(--muted);margin-top:4px">MP3, WAV, OGG, M4A · Click o arrastrá</div>
-          </div>
-          <input type="file" id="mp-file-in" accept="audio/*" multiple style="display:none" onchange="PageMusic._fileInput(event)">
-        </div>
-      </div>`;
+    // Upload audio
+    html += '<div style="padding:0 16px 16px">' +
+      '<div style="background:var(--card);border:1.5px dashed var(--border2);border-radius:var(--r);padding:18px;text-align:center;cursor:pointer"' +
+      ' onclick="document.getElementById(\'mp-file-in\').click()"' +
+      ' ondragover="event.preventDefault();this.style.borderColor=\'var(--amber)\'"' +
+      ' ondragleave="this.style.borderColor=\'\'"' +
+      ' ondrop="event.preventDefault();this.style.borderColor=\'\';PageMusic._dropAudio(event)">' +
+      '<div style="font-size:1.8rem;margin-bottom:6px;opacity:.35">🎵</div>' +
+      '<div style="font-size:.85rem;font-weight:500;color:var(--text2)">' + (lang==='ru'?'Загрузить аудио':'Upload audio') + '</div>' +
+      '<div style="font-size:.68rem;color:var(--muted);margin-top:3px">MP3, WAV, OGG, M4A</div>' +
+      '<div style="font-size:.6rem;color:var(--dim);margin-top:2px">⚠️ ' + (lang==='ru'?'Только свои аудиофайлы или без авторских прав':'Only your own audio or copyright-free files') + '</div>' +
+      '</div>' +
+      '<input type="file" id="mp-file-in" accept="audio/*" multiple style="display:none" onchange="PageMusic._fileInput(event)">' +
+    '</div>';
+
+    c.innerHTML = html;
   }
 
   function _goto(idx) {
     _idx = idx;
-    const t = _playlist[idx];
-    if (!t) return;
-
-    const ytWrap = Utils.el('yt-wrap');
-    const audioWrap = Utils.el('audio-wrap');
-    const iframe = Utils.el('yt-iframe');
-    const audioEl = Utils.el('audio-el');
-    const audioLabel = Utils.el('audio-label');
-
-    if (t.yt) {
-      if (ytWrap) ytWrap.style.display = '';
-      if (audioWrap) audioWrap.style.display = 'none';
-      if (audioEl) { audioEl.pause(); audioEl.src = ''; }
-      if (iframe) iframe.src = `https://www.youtube.com/embed/${t.yt}?autoplay=1&rel=0&modestbranding=1`;
-    } else if (t.url) {
-      if (ytWrap) ytWrap.style.display = 'none';
-      if (audioWrap) audioWrap.style.display = '';
-      if (iframe) iframe.src = '';
-      if (audioEl) { audioEl.src = t.url; audioEl.play().catch(()=>{}); }
-      if (audioLabel) audioLabel.textContent = t.title;
-    }
-
-    // Update playlist highlight
-    Utils.qsa('[id^="mp-track-"]').forEach((el, i) => {
-      el.style.borderColor = i === idx ? 'var(--amber)' : '';
-      el.style.background = i === idx ? 'var(--amber-s)' : '';
-    });
-
-    // Update mini topbar player
-    MusicPlayer._setTrack(t);
-    const c = Utils.el('page-' + Router.current());
-    if (c) _render(c);
+    const lang = State.get('profile')?.lang || 'en';
+    const c = document.getElementById('page-music');
+    if (c) _render(c, lang);
   }
 
   function _play() {
-    const t = _playlist[_idx];
-    if (!t) return;
-    const iframe = Utils.el('yt-iframe');
-    if (t.yt && iframe) {
-      iframe.src = `https://www.youtube.com/embed/${t.yt}?autoplay=1&rel=0&modestbranding=1`;
-      MusicPlayer._setPlaying(true);
-    }
-    const audioEl = Utils.el('audio-el');
-    if (!t.yt && audioEl) { audioEl.play().catch(()=>{}); }
+    const t = _playlist[_idx]; if (!t) return;
+    const iframe = document.getElementById('yt-iframe');
+    if (t.yt && iframe) iframe.src = 'https://www.youtube.com/embed/' + t.yt + '?autoplay=1&rel=0&modestbranding=1';
+    const audio = document.getElementById('audio-el');
+    if (!t.yt && audio) audio.play().catch(()=>{});
+    // Show in topbar
+    if (typeof MusicPlayer !== 'undefined') MusicPlayer._setTrack(t);
   }
 
-  function _next() {
-    if (!_playlist.length) return;
-    _goto((_idx + 1) % _playlist.length);
-  }
-
-  function _prev() {
-    if (!_playlist.length) return;
-    _goto((_idx - 1 + _playlist.length) % _playlist.length);
-  }
+  function _next() { if (!_playlist.length) return; _goto((_idx+1) % _playlist.length); }
+  function _prev() { if (!_playlist.length) return; _goto((_idx-1+_playlist.length) % _playlist.length); }
 
   async function _remove(idx) {
     const t = _playlist[idx];
-    if (t?.id) {
-      try { await DB.remove('music', { id: t.id }); } catch {}
-    }
+    if (t?.id) { try { await DB.remove('music', {id:t.id}); } catch {} }
     _playlist.splice(idx, 1);
-    if (_idx >= _playlist.length) _idx = Math.max(0, _playlist.length - 1);
-    const c = Utils.el('page-' + Router.current());
-    if (c) _render(c);
-    if (window.toast) toast('🗑 Eliminado');
+    LocalCache.set('music', _playlist);
+    if (_idx >= _playlist.length) _idx = Math.max(0, _playlist.length-1);
+    const lang = State.get('profile')?.lang || 'en';
+    const c = document.getElementById('page-music');
+    if (c) _render(c, lang);
+    if (window.toast) toast('🗑 Removed');
   }
 
   function _showYtModal() {
+    const lang = State.get('profile')?.lang || 'en';
     Modal.show({
-      title: '🎵 Agregar desde YouTube',
-      content: `
-        <div class="form-group">
-          <label class="input-label">Link de YouTube</label>
-          <input class="input-field" id="yt-url-in" placeholder="https://youtube.com/watch?v=..." autocomplete="off">
-          <div style="font-size:.7rem;color:var(--muted);margin-top:6px">youtube.com/watch?v=... · youtu.be/... · shorts/...</div>
-        </div>
-        <div class="form-group">
-          <label class="input-label">Nombre (opcional)</label>
-          <input class="input-field" id="yt-name-in" placeholder="Ej: Nuestra canción">
-        </div>`,
-      footer: `<button class="btn btn-primary btn-full" onclick="PageMusic._addYt()">Agregar a la playlist</button>`
+      title: lang==='ru'?'🎵 Добавить YouTube':'🎵 Add from YouTube',
+      content: '<div class="form-group"><label class="input-label">YouTube link</label>' +
+        '<input class="input-field" id="yt-url-in" placeholder="https://youtube.com/watch?v=..." autocomplete="off">' +
+        '<div style="font-size:.68rem;color:var(--muted);margin-top:5px">youtube.com/watch?v=... · youtu.be/... · shorts/...</div></div>' +
+        '<div class="form-group"><label class="input-label">' + (lang==='ru'?'Название (необязательно)':'Name (optional)') + '</label>' +
+        '<input class="input-field" id="yt-name-in" placeholder="' + (lang==='ru'?'Наша песня':'Our song') + '"></div>',
+      footer: '<button class="btn btn-primary btn-full" onclick="PageMusic._addYt()">' + (lang==='ru'?'Добавить':'Add to playlist') + '</button>'
     });
   }
 
   async function _addYt() {
     const url  = Utils.el('yt-url-in')?.value?.trim();
-    const name = Utils.el('yt-name-in')?.value?.trim() || 'Nueva canción';
-    if (!url) { if (window.toast) toast('⚠️ Pegá un link de YouTube'); return; }
+    const name = Utils.el('yt-name-in')?.value?.trim() || 'Song';
+    if (!url) { if (window.toast) toast('⚠️ Paste a YouTube link'); return; }
     const match = url.match(/(?:v=|youtu\.be\/|embed\/|shorts\/)([a-zA-Z0-9_-]{11})/);
-    if (!match) { if (window.toast) toast('⚠️ Link inválido'); return; }
+    if (!match) { if (window.toast) toast('⚠️ Invalid YouTube link'); return; }
     const vid = match[1];
     const coupleId = AppAuth.currentCoupleId();
     Modal.close();
     try {
       const row = coupleId
-        ? await DB.insert('music', { couple_id: coupleId, title: name, artist: 'YouTube', url: 'yt:' + vid })
-        : { id: null, title: name, artist: 'YouTube', url: 'yt:' + vid };
-      _playlist.push({ id: row.id, title: name, artist: 'YouTube', note: '🎵', yt: vid });
-      if (window.toast) toast('✅ ' + name + ' agregada');
+        ? await DB.insert('music', {couple_id:coupleId, title:name, artist:'YouTube', url:'yt:'+vid})
+        : {id:null, title:name, artist:'YouTube', url:'yt:'+vid};
+      _playlist.push({id:row.id, title:name, artist:'YouTube', note:'🎵', yt:vid});
+      LocalCache.set('music', _playlist);
+      if (window.toast) toast('✅ ' + name + ' added');
     } catch {
-      _playlist.push({ id: null, title: name, artist: 'YouTube', note: '🎵', yt: vid });
-      if (window.toast) toast('✅ ' + name + ' agregada (local)');
+      _playlist.push({id:null, title:name, artist:'YouTube', note:'🎵', yt:vid});
+      if (window.toast) toast('✅ ' + name + ' added (local)');
     }
-    const c = Utils.el('page-' + Router.current());
-    if (c) _render(c);
+    const lang = State.get('profile')?.lang || 'en';
+    const c = document.getElementById('page-music');
+    if (c) _render(c, lang);
   }
 
   function _dropAudio(e) {
     const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('audio/'));
-    if (!files.length) { if (window.toast) toast('⚠️ Solo archivos de audio'); return; }
+    if (!files.length) { if (window.toast) toast('⚠️ Audio files only'); return; }
     files.forEach(_addAudioFile);
   }
 
-  function _fileInput(e) {
-    Array.from(e.target.files).forEach(_addAudioFile);
-    e.target.value = '';
-  }
+  function _fileInput(e) { Array.from(e.target.files).forEach(_addAudioFile); e.target.value=''; }
 
   async function _addAudioFile(file) {
-    const title = file.name.replace(/\.[^.]+$/, '').replace(/[-_]/g, ' ').trim() || 'Audio';
+    const title = file.name.replace(/\.[^.]+$/,'').replace(/[-_]/g,' ').trim() || 'Audio';
     const coupleId = AppAuth.currentCoupleId();
-    let url = URL.createObjectURL(file); // local preview
+    let url = URL.createObjectURL(file);
     let dbId = null;
-
-    // Try to upload to Supabase storage
     if (coupleId) {
       try {
-        const path = `${coupleId}/${Date.now()}-${file.name}`;
+        const path = coupleId+'/'+Date.now()+'-'+file.name;
         url = await DB.uploadFile('music', path, file);
-        const row = await DB.insert('music', { couple_id: coupleId, title, artist: 'Audio', url });
+        const row = await DB.insert('music', {couple_id:coupleId, title, artist:'Audio', url});
         dbId = row.id;
-      } catch {
-        // Fall back to local blob URL
-      }
+      } catch {}
     }
-
-    _playlist.push({ id: dbId, title, artist: 'Audio', note: '🎵', url });
-    if (window.toast) toast('✅ "' + title + '" agregado');
-    const c = Utils.el('page-' + Router.current());
-    if (c) _render(c);
+    _playlist.push({id:dbId, title, artist:'Audio', note:'🎵', url});
+    LocalCache.set('music', _playlist);
+    if (window.toast) toast('✅ "'+title+'" added');
+    const lang = State.get('profile')?.lang || 'en';
+    const c = document.getElementById('page-music');
+    if (c) _render(c, lang);
   }
 
   return { init, _goto, _play, _next, _prev, _remove, _showYtModal, _addYt, _dropAudio, _fileInput };
@@ -4656,7 +4682,10 @@ const PageChallenges = (() => {
 
   async function init(container) {
     const lang = State.get('profile')?.lang || 'es';
-    container.innerHTML = '<div class="page-title display">' + (lang==='ru'?'Задания 🔥':'Retos 🔥') + '</div><div style="padding:20px;text-align:center"><div class="spinner"></div></div>';
+    container.innerHTML = '<div class="page-title display">Challenges 🔥</div>' +
+      '<div style="padding:0 16px;display:flex;flex-direction:column;gap:10px;margin-top:16px">' +
+      Array(4).fill('<div style="height:90px;background:var(--surface2);border-radius:var(--r);animation:pulse 1.5s infinite"></div>').join('') +
+      '</div>';
 
     const coupleId = AppAuth.currentCoupleId();
     const month = new Date().toISOString().slice(0,7);
@@ -5607,6 +5636,7 @@ window.addEventListener('DOMContentLoaded', () => setTimeout(() => App.init(), 8
 if(typeof DB!=="undefined")window.DB=DB;
 if(typeof Utils!=="undefined")window.Utils=Utils;
 if(typeof State!=="undefined")window.State=State;
+if(typeof LocalCache!=="undefined")window.LocalCache=LocalCache;
 if(typeof AppAuth!=="undefined")window.AppAuth=AppAuth;
 if(typeof Router!=="undefined")window.Router=Router;
 if(typeof Notifications!=="undefined")window.Notifications=Notifications;
