@@ -1585,12 +1585,17 @@ const State = (() => {
     const t = localStorage.getItem('dl_theme');
     if (t) _s.theme = t;
     _s.streak = parseInt(localStorage.getItem('dl_streak') || '0');
-    // Load cached couple/partner for instant display
+    // Load cached data for instant display — will be overwritten by fresh data from Supabase
     try {
       const cp = localStorage.getItem('dl_couple');
       const pt = localStorage.getItem('dl_partner');
       const pr = localStorage.getItem('dl_profile');
-      if (cp) _s.couple  = JSON.parse(cp);
+      // Only use cache if it's less than 24 hours old
+      if (cp) {
+        const parsed = JSON.parse(cp);
+        const age = Date.now() - (parsed._ts || 0);
+        if (age < 24 * 60 * 60 * 1000) _s.couple = parsed;
+      }
       if (pt) _s.partner = JSON.parse(pt);
       if (pr) _s.profile = JSON.parse(pr);
     } catch {}
@@ -1705,9 +1710,10 @@ const AppAuth = (() => {
         State.set('members', allMembers);
         State.set('partner', partner);
 
-        // Cache in localStorage for instant load next time
+        // Cache in localStorage for instant display next time
         try {
-          localStorage.setItem('dl_couple',  JSON.stringify(couple));
+          // Store with timestamp so we know when to refresh
+          localStorage.setItem('dl_couple',  JSON.stringify({...couple, _ts: Date.now()}));
           localStorage.setItem('dl_partner', JSON.stringify(partner));
           localStorage.setItem('dl_profile', JSON.stringify(State.get('profile')));
         } catch {}
@@ -1789,10 +1795,16 @@ const AppAuth = (() => {
 
   async function signOut() {
     try { await DB.Auth.signOut(); } catch {}
+    // Clear ALL local state — critical to avoid stale auth tokens
     try {
-      localStorage.removeItem('dl_couple');
-      localStorage.removeItem('dl_partner');
-      localStorage.removeItem('dl_profile');
+      const keys = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && (k.startsWith('dl_') || k.startsWith('sb-') || k.includes('supabase'))) {
+          keys.push(k);
+        }
+      }
+      keys.forEach(k => localStorage.removeItem(k));
     } catch {}
     State.clear();
     App.showAuth();
@@ -3996,74 +4008,68 @@ const PageMusic = (() => {
 })();
 
 
-// ── DRAW PAGE — Full screen real-time canvas ──────────────────────────────────
+// ── DRAW PAGE — Infinite canvas with pinch zoom ───────────────────────────────
 const PageDraw = (() => {
-  let _ctx = null, _canvas = null;
-  let _drawing = false, _tool = 'pen', _color = '#e8a84a', _size = 5, _opacity = 1;
+  let _canvas, _ctx;
+  let _tool = 'pen', _color = '#e8a84a', _size = 5;
+  let _drawing = false;
   let _history = [], _histPos = -1;
-  let _channel = null, _saveTimeout = null;
-  let _lastX = 0, _lastY = 0;
-  let _remoteCtx = {}; // per-user remote draw state
+  let _saveTimeout = null, _channel = null;
 
-  const COLORS = [
-    '#f0ede8','#e8a84a','#e07890','#7ec8e3','#70c8a0','#a78bfa',
-    '#ff6b6b','#ffd93d','#6bcb77','#4d96ff','#c77dff','#000000',
-  ];
+  // Pan & zoom state
+  let _zoom  = 1;
+  let _panX  = 0, _panY  = 0;
+  let _lastPinchDist = null;
+  let _lastPanX = 0, _lastPanY = 0;
+  let _isPanning = false;
+  let _pinching = false;
+
+  const COLORS = ['#f0ede8','#e8a84a','#e07890','#7ec8e3','#70c8a0','#a78bfa','#ff6b6b','#ffd93d','#000000','#ffffff'];
 
   function init(container) {
     container.style.cssText = 'padding:0;position:absolute;inset:0;display:flex;flex-direction:column;overflow:hidden';
 
-    container.innerHTML = `
-      <div class="draw-toolbar" id="draw-toolbar">
-        <div class="draw-tools">
-          <button class="draw-tool-btn active" data-tool="pen" onclick="PageDraw._setTool('pen',this)" title="Pluma">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
-          </button>
-          <button class="draw-tool-btn" data-tool="marker" onclick="PageDraw._setTool('marker',this)" title="Marcador">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
-          </button>
-          <button class="draw-tool-btn" data-tool="eraser" onclick="PageDraw._setTool('eraser',this)" title="Borrador">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 20 20 16 4 16 8 20"/><path d="M6.5 12.5 L2.5 8.5 L12 2 L20 10.5 L15 16"/></svg>
-          </button>
-          <button class="draw-tool-btn" data-tool="line" onclick="PageDraw._setTool('line',this)" title="Línea">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="19" x2="19" y2="5"/></svg>
-          </button>
-        </div>
-        <div class="draw-colors">
-          ${COLORS.map(c => `<button class="draw-color-btn${c===_color?' active':''}" style="background:${c}" onclick="PageDraw._setColor('${c}',this)" data-c="${c}"></button>`).join('')}
-          <input type="color" value="${_color}" title="Color libre" oninput="PageDraw._setColor(this.value)" style="width:22px;height:22px;border:none;border-radius:50%;cursor:pointer;background:none;padding:0;flex-shrink:0">
-        </div>
-        <div class="draw-size-wrap">
-          <input type="range" min="1" max="60" value="${_size}" class="draw-size-slider" oninput="PageDraw._setSize(+this.value)">
-          <div class="draw-size-preview" id="draw-size-dot" style="width:${_size}px;height:${_size}px;background:${_color}"></div>
-        </div>
-        <div class="draw-actions">
-          <button class="draw-action-btn" onclick="PageDraw._undo()" title="Deshacer">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg>
-          </button>
-          <button class="draw-action-btn" onclick="PageDraw._redo()" title="Rehacer">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 14 20 9 15 4"/><path d="M4 20v-7a4 4 0 0 1 4-4h12"/></svg>
-          </button>
-          <button class="draw-action-btn" onclick="PageDraw._clear()" title="Limpiar">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6m4-6v6"/></svg>
-          </button>
-          <button class="draw-action-btn" onclick="PageDraw._save()" title="Guardar imagen">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-          </button>
-        </div>
-      </div>
+    const lang = State.get('profile')?.lang || 'en';
+    const colBtns = COLORS.map(c =>
+      '<button class="draw-color-btn' + (c===_color?' active':'') + '" style="background:' + c + '" onclick="PageDraw._setColor(\'' + c + '\',this)" data-c="' + c + '"></button>'
+    ).join('');
 
-      <div class="draw-canvas-container" id="draw-container">
-        <canvas id="draw-canvas"></canvas>
-        <div class="draw-who-label" id="draw-who"></div>
-        <div class="draw-cursor" id="draw-cursor" style="display:none"></div>
-      </div>
+    container.innerHTML =
+      '<div class="draw-toolbar">' +
+        '<div class="draw-tools">' +
+          '<button class="draw-tool-btn active" id="dt-pen" onclick="PageDraw._setTool(\'pen\')" title="Pen"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button>' +
+          '<button class="draw-tool-btn" id="dt-marker" onclick="PageDraw._setTool(\'marker\')" title="Marker"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="3" y1="8" x2="21" y2="8"/><line x1="3" y1="16" x2="21" y2="16"/></svg></button>' +
+          '<button class="draw-tool-btn" id="dt-eraser" onclick="PageDraw._setTool(\'eraser\')" title="Eraser"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 20H7L3 16l10-10 7 7-3.5 3.5"/></svg></button>' +
+          '<button class="draw-tool-btn" id="dt-pan" onclick="PageDraw._setTool(\'pan\')" title="Pan / Move"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 9l-3 3 3 3M9 5l3-3 3 3M15 19l-3 3-3-3M19 9l3 3-3 3M12 12h.01"/><path d="M12 7v5m0 0l-2-2m2 2l2-2M12 12v5m0 0l-2-2m2 2l2-2"/></svg></button>' +
+        '</div>' +
+        '<div class="draw-colors">' + colBtns +
+          '<input type="color" value="' + _color + '" style="width:22px;height:22px;border:none;border-radius:50%;cursor:pointer;background:none;padding:0;flex-shrink:0" oninput="PageDraw._setColor(this.value)">' +
+        '</div>' +
+        '<div class="draw-size-wrap">' +
+          '<input type="range" min="1" max="60" value="' + _size + '" class="draw-size-slider" oninput="PageDraw._setSize(+this.value)">' +
+          '<div class="draw-size-dot" id="dsd" style="width:' + _size + 'px;height:' + _size + 'px;background:' + _color + ';border-radius:50%;flex-shrink:0;min-width:4px;min-height:4px;max-width:30px;max-height:30px;transition:all .18s"></div>' +
+        '</div>' +
+        '<div class="draw-actions">' +
+          '<button class="draw-action-btn" onclick="PageDraw._undo()" title="Undo"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg></button>' +
+          '<button class="draw-action-btn" onclick="PageDraw._redo()" title="Redo"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 14 20 9 15 4"/><path d="M4 20v-7a4 4 0 0 1 4-4h12"/></svg></button>' +
+          '<button class="draw-action-btn" onclick="PageDraw._clear()" title="Clear"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/></svg></button>' +
+          '<button class="draw-action-btn" onclick="PageDraw._resetView()" title="Reset view">⌂</button>' +
+          '<button class="draw-action-btn" onclick="PageDraw._save()" title="Save"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>' +
+        '</div>' +
+      '</div>' +
 
-      <div class="draw-status-bar">
-        <span id="draw-partner-status" style="color:var(--muted);font-size:.68rem"></span>
-        <span style="font-size:.65rem;color:var(--dim)">💾 Auto-guardado · Tiempo real</span>
-      </div>
-    `;
+      // Zoom indicator
+      '<div style="position:absolute;bottom:32px;right:10px;z-index:10;background:var(--glass2);border:1px solid var(--border);border-radius:8px;padding:3px 8px;font-size:.65rem;color:var(--muted);pointer-events:none" id="zoom-ind">100%</div>' +
+
+      '<div class="draw-canvas-container" id="draw-cnt" style="flex:1;overflow:hidden;position:relative;cursor:crosshair">' +
+        '<canvas id="draw-canvas"></canvas>' +
+        '<div class="draw-who" id="draw-who"></div>' +
+      '</div>' +
+
+      '<div style="padding:3px 10px;display:flex;align-items:center;justify-content:space-between;background:var(--glass2);border-top:1px solid var(--border);flex-shrink:0;font-size:.62rem">' +
+        '<span id="draw-partner-status" style="color:var(--muted)"></span>' +
+        '<span style="color:var(--dim)">Pinch to zoom · ' + (lang==='ru'?'Авто-сохранение':'Auto-save') + '</span>' +
+      '</div>';
 
     _initCanvas();
     _loadSaved();
@@ -4072,183 +4078,285 @@ const PageDraw = (() => {
 
   function _initCanvas() {
     _canvas = document.getElementById('draw-canvas');
+    if (!_canvas) return;
     _ctx = _canvas.getContext('2d');
+
+    const cnt = document.getElementById('draw-cnt');
+    new ResizeObserver(_resize).observe(cnt);
     _resize();
 
-    const ro = new ResizeObserver(() => _resize());
-    const container = document.getElementById('draw-container');
-    if (container) ro.observe(container);
+    // Mouse events
+    _canvas.addEventListener('mousedown',  _onMouseDown);
+    _canvas.addEventListener('mousemove',  _onMouseMove);
+    _canvas.addEventListener('mouseup',    _onMouseUp);
+    _canvas.addEventListener('mouseleave', _onMouseUp);
+    _canvas.addEventListener('wheel',      _onWheel, {passive:false});
 
-    // Mouse
-    _canvas.addEventListener('mousedown', _startDraw);
-    _canvas.addEventListener('mousemove', _moveDraw);
-    _canvas.addEventListener('mouseup', _endDraw);
-    _canvas.addEventListener('mouseleave', _endDraw);
-    // Touch
-    _canvas.addEventListener('touchstart', e => { e.preventDefault(); _startDraw(_touchToMouse(e)); }, { passive: false });
-    _canvas.addEventListener('touchmove', e => { e.preventDefault(); _moveDraw(_touchToMouse(e)); }, { passive: false });
-    _canvas.addEventListener('touchend', e => { e.preventDefault(); _endDraw(); }, { passive: false });
+    // Touch events — pinch zoom + draw
+    _canvas.addEventListener('touchstart', _onTouchStart, {passive:false});
+    _canvas.addEventListener('touchmove',  _onTouchMove,  {passive:false});
+    _canvas.addEventListener('touchend',   _onTouchEnd,   {passive:false});
   }
 
   function _resize() {
     if (!_canvas) return;
-    const c = document.getElementById('draw-container');
-    if (!c) return;
-    const w = c.clientWidth, h = c.clientHeight;
+    const cnt = document.getElementById('draw-cnt');
+    if (!cnt) return;
+    const w = cnt.clientWidth, h = cnt.clientHeight;
     if (w < 10 || h < 10) return;
+    // Save and restore drawing
     const saved = _canvas.width > 10 ? _canvas.toDataURL() : null;
-    _canvas.width = w; _canvas.height = h;
-    _applyCtxStyle();
-    if (saved) { const img = new Image(); img.onload = () => _ctx.drawImage(img, 0, 0); img.src = saved; }
-    _saveHistory();
+    _canvas.width  = w;
+    _canvas.height = h;
+    _canvas.style.position = 'absolute';
+    _canvas.style.inset = '0';
+    _canvas.style.width  = '100%';
+    _canvas.style.height = '100%';
+    _applyStyle();
+    if (saved) { const img = new Image(); img.onload = () => _ctx.drawImage(img,0,0); img.src = saved; }
+    _saveHistoryEntry();
   }
 
-  function _applyCtxStyle() {
-    if (!_ctx) return;
-    _ctx.lineCap = 'round'; _ctx.lineJoin = 'round';
-    if (_tool === 'eraser') {
-      _ctx.globalCompositeOperation = 'destination-out';
-      _ctx.globalAlpha = 1;
-    } else if (_tool === 'marker') {
-      _ctx.globalCompositeOperation = 'source-over';
-      _ctx.globalAlpha = 0.5;
-    } else {
-      _ctx.globalCompositeOperation = 'source-over';
-      _ctx.globalAlpha = _opacity;
+  // ── Coordinate transforms ──────────────────────────────────────────────────
+  function _screenToCanvas(sx, sy) {
+    return { x: (sx - _panX) / _zoom, y: (sy - _panY) / _zoom };
+  }
+
+  // ── Mouse handlers ─────────────────────────────────────────────────────────
+  function _onMouseDown(e) {
+    const {x,y} = _screenToCanvas(e.offsetX, e.offsetY);
+    if (_tool === 'pan') {
+      _isPanning = true; _lastPanX = e.clientX; _lastPanY = e.clientY;
+      _canvas.style.cursor = 'grabbing'; return;
     }
-    _ctx.strokeStyle = _tool === 'eraser' ? 'rgba(0,0,0,1)' : _color;
-    _ctx.lineWidth = _size;
+    _drawing = true;
+    _applyStyle();
+    _ctx.save();
+    _ctx.setTransform(_zoom, 0, 0, _zoom, _panX, _panY);
+    _ctx.beginPath(); _ctx.moveTo(x, y);
+    _broadcastStroke('start', x, y);
   }
 
-  function _touchToMouse(e) {
-    const t = e.touches[0] || e.changedTouches[0];
-    return { clientX: t.clientX, clientY: t.clientY, preventDefault: () => {} };
-  }
-
-  function _coords(e) {
-    const r = _canvas.getBoundingClientRect();
-    return { x: (e.clientX - r.left) * (_canvas.width / r.width), y: (e.clientY - r.top) * (_canvas.height / r.height) };
-  }
-
-  let _lineStart = null;
-  function _startDraw(e) {
-    const { x, y } = _coords(e);
-    _drawing = true; _lastX = x; _lastY = y;
-    _applyCtxStyle();
-    if (_tool === 'line') {
-      _lineStart = { x, y };
-    } else {
-      _ctx.beginPath(); _ctx.moveTo(x, y);
+  function _onMouseMove(e) {
+    if (_isPanning) {
+      _panX += e.clientX - _lastPanX; _panY += e.clientY - _lastPanY;
+      _lastPanX = e.clientX; _lastPanY = e.clientY;
+      _redrawFromHistory(); _updateZoomIndicator(); return;
     }
-    _broadcast('start', x, y);
-  }
-
-  function _moveDraw(e) {
-    const { x, y } = _coords(e);
     if (!_drawing) return;
-    if (_tool === 'line') {
-      // Preview line — redraw from history
-      if (_histPos >= 0) {
-        const img = new Image(); img.src = _history[_histPos];
-        _ctx.clearRect(0,0,_canvas.width,_canvas.height);
-        _ctx.drawImage(img, 0, 0);
-      }
-      _applyCtxStyle();
-      _ctx.beginPath(); _ctx.moveTo(_lineStart.x, _lineStart.y); _ctx.lineTo(x, y); _ctx.stroke();
-    } else {
-      _ctx.lineTo(x, y); _ctx.stroke();
-    }
-    _lastX = x; _lastY = y;
-    _broadcast('move', x, y);
+    const {x,y} = _screenToCanvas(e.offsetX, e.offsetY);
+    _ctx.lineTo(x, y); _ctx.stroke();
     _scheduleSave();
+    _broadcastStroke('move', x, y);
   }
 
-  function _endDraw() {
+  function _onMouseUp() {
+    if (_isPanning) { _isPanning = false; _canvas.style.cursor = _tool==='pan'?'grab':'crosshair'; return; }
     if (!_drawing) return;
     _drawing = false;
-    _lineStart = null;
-    _saveHistory();
-    _broadcast('end', 0, 0);
+    _ctx.restore();
+    _saveHistoryEntry();
+    _broadcastStroke('end', 0, 0);
   }
 
-  function _saveHistory() {
+  function _onWheel(e) {
+    e.preventDefault();
+    const rect = _canvas.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+    const delta = e.deltaY > 0 ? 0.9 : 1.1;
+    _zoomAt(mx, my, delta);
+  }
+
+  // ── Touch handlers — pinch zoom ────────────────────────────────────────────
+  function _getTouchDist(t1, t2) {
+    return Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
+  }
+  function _getTouchMid(t1, t2, rect) {
+    return { x: (t1.clientX + t2.clientX)/2 - rect.left, y: (t1.clientY + t2.clientY)/2 - rect.top };
+  }
+
+  function _onTouchStart(e) {
+    e.preventDefault();
+    if (e.touches.length === 2) {
+      _pinching = true; _drawing = false;
+      _lastPinchDist = _getTouchDist(e.touches[0], e.touches[1]);
+      return;
+    }
+    if (e.touches.length === 1) {
+      if (_tool === 'pan') {
+        _isPanning = true; _lastPanX = e.touches[0].clientX; _lastPanY = e.touches[0].clientY; return;
+      }
+      const rect = _canvas.getBoundingClientRect();
+      const {x,y} = _screenToCanvas(e.touches[0].clientX - rect.left, e.touches[0].clientY - rect.top);
+      _drawing = true;
+      _applyStyle();
+      _ctx.save();
+      _ctx.setTransform(_zoom, 0, 0, _zoom, _panX, _panY);
+      _ctx.beginPath(); _ctx.moveTo(x, y);
+    }
+  }
+
+  function _onTouchMove(e) {
+    e.preventDefault();
+    if (e.touches.length === 2 && _pinching) {
+      const dist = _getTouchDist(e.touches[0], e.touches[1]);
+      const rect = _canvas.getBoundingClientRect();
+      const mid  = _getTouchMid(e.touches[0], e.touches[1], rect);
+      if (_lastPinchDist) {
+        const scale = dist / _lastPinchDist;
+        _zoomAt(mid.x, mid.y, scale);
+      }
+      _lastPinchDist = dist; return;
+    }
+    if (_isPanning && e.touches.length === 1) {
+      _panX += e.touches[0].clientX - _lastPanX; _panY += e.touches[0].clientY - _lastPanY;
+      _lastPanX = e.touches[0].clientX; _lastPanY = e.touches[0].clientY;
+      _redrawFromHistory(); _updateZoomIndicator(); return;
+    }
+    if (_drawing && e.touches.length === 1) {
+      const rect = _canvas.getBoundingClientRect();
+      const {x,y} = _screenToCanvas(e.touches[0].clientX - rect.left, e.touches[0].clientY - rect.top);
+      _ctx.lineTo(x, y); _ctx.stroke();
+      _scheduleSave();
+    }
+  }
+
+  function _onTouchEnd(e) {
+    e.preventDefault();
+    if (e.touches.length < 2) { _pinching = false; _lastPinchDist = null; }
+    if (e.touches.length === 0) {
+      _isPanning = false;
+      if (_drawing) { _drawing = false; _ctx.restore(); _saveHistoryEntry(); }
+    }
+  }
+
+  // ── Zoom ───────────────────────────────────────────────────────────────────
+  function _zoomAt(cx, cy, scale) {
+    const newZoom = Math.max(0.1, Math.min(8, _zoom * scale));
+    const factor  = newZoom / _zoom;
+    _panX = cx - factor * (cx - _panX);
+    _panY = cy - factor * (cy - _panY);
+    _zoom = newZoom;
+    _redrawFromHistory();
+    _updateZoomIndicator();
+  }
+
+  function _resetView() {
+    _zoom = 1; _panX = 0; _panY = 0;
+    _redrawFromHistory(); _updateZoomIndicator();
+  }
+
+  function _updateZoomIndicator() {
+    const el = document.getElementById('zoom-ind');
+    if (el) el.textContent = Math.round(_zoom * 100) + '%';
+  }
+
+  // ── Drawing style ──────────────────────────────────────────────────────────
+  function _applyStyle() {
+    if (!_ctx) return;
+    _ctx.lineCap = 'round'; _ctx.lineJoin = 'round';
+    _ctx.globalCompositeOperation = _tool === 'eraser' ? 'destination-out' : 'source-over';
+    _ctx.globalAlpha  = _tool === 'marker' ? 0.45 : 1;
+    _ctx.strokeStyle  = _tool === 'eraser' ? 'rgba(0,0,0,1)' : _color;
+    _ctx.lineWidth    = _size;
+  }
+
+  // ── History (undo/redo) ────────────────────────────────────────────────────
+  function _saveHistoryEntry() {
     if (!_canvas || _canvas.width < 10) return;
     _history = _history.slice(0, _histPos + 1);
-    _history.push(_canvas.toDataURL());
-    if (_history.length > 30) { _history.shift(); }
+    _history.push({ img: _canvas.toDataURL(), zoom: _zoom, panX: _panX, panY: _panY });
+    if (_history.length > 30) _history.shift();
     _histPos = _history.length - 1;
+  }
+
+  function _redrawFromHistory() {
+    if (_histPos < 0 || !_history[_histPos]) return;
+    const entry = _history[_histPos];
+    const img = new Image();
+    img.onload = () => {
+      _ctx.clearRect(0, 0, _canvas.width, _canvas.height);
+      _ctx.drawImage(img, 0, 0);
+    };
+    img.src = entry.img;
   }
 
   function _undo() {
     if (_histPos < 1) return;
     _histPos--;
+    const entry = _history[_histPos];
     const img = new Image();
     img.onload = () => { _ctx.clearRect(0,0,_canvas.width,_canvas.height); _ctx.drawImage(img,0,0); };
-    img.src = _history[_histPos];
+    img.src = entry.img;
     _scheduleSave();
   }
 
   function _redo() {
     if (_histPos >= _history.length - 1) return;
     _histPos++;
+    const entry = _history[_histPos];
     const img = new Image();
     img.onload = () => { _ctx.clearRect(0,0,_canvas.width,_canvas.height); _ctx.drawImage(img,0,0); };
-    img.src = _history[_histPos];
+    img.src = entry.img;
     _scheduleSave();
   }
 
   function _clear() {
     _ctx.globalCompositeOperation = 'source-over';
     _ctx.clearRect(0,0,_canvas.width,_canvas.height);
-    _saveHistory();
+    _saveHistoryEntry();
     _scheduleSave();
-    _applyCtxStyle();
+    _applyStyle();
   }
 
   function _save() {
     const a = document.createElement('a');
     a.href = _canvas.toDataURL('image/png');
-    a.download = 'dibujo-duolector.png';
+    a.download = 'drawing-duolector.png';
     a.click();
   }
 
+  // ── Controls ───────────────────────────────────────────────────────────────
   function _setColor(c, btn) {
     _color = c;
-    if (_tool === 'eraser') _setTool('pen', document.querySelector('[data-tool="pen"]'));
+    if (_tool === 'eraser') _setTool('pen');
     document.querySelectorAll('.draw-color-btn').forEach(b => b.classList.remove('active'));
     if (btn) btn.classList.add('active');
-    const dot = document.getElementById('draw-size-dot');
-    if (dot) { dot.style.background = c; }
-    _applyCtxStyle();
+    const dot = document.getElementById('dsd');
+    if (dot) dot.style.background = c;
+    _applyStyle();
   }
 
   function _setSize(v) {
     _size = v;
-    const dot = document.getElementById('draw-size-dot');
-    const clamped = Math.max(4, Math.min(v, 32));
-    if (dot) { dot.style.width = clamped + 'px'; dot.style.height = clamped + 'px'; }
-    _applyCtxStyle();
+    const dot = document.getElementById('dsd');
+    const s = Math.max(4, Math.min(v, 30));
+    if (dot) { dot.style.width = s+'px'; dot.style.height = s+'px'; }
+    _applyStyle();
   }
 
-  function _setTool(t, btn) {
+  function _setTool(t) {
     _tool = t;
-    document.querySelectorAll('.draw-tool-btn').forEach(b => b.classList.remove('active'));
-    if (btn) btn.classList.add('active');
-    _applyCtxStyle();
+    ['pen','marker','eraser','pan'].forEach(name => {
+      const el = document.getElementById('dt-' + name);
+      if (el) el.classList.toggle('active', name === t);
+    });
+    const cnt = document.getElementById('draw-cnt');
+    if (cnt) cnt.style.cursor = t === 'pan' ? 'grab' : 'crosshair';
+    _applyStyle();
   }
 
+  // ── Persist ────────────────────────────────────────────────────────────────
   function _scheduleSave() {
     clearTimeout(_saveTimeout);
-    _saveTimeout = setTimeout(_autoSave, 1800);
+    _saveTimeout = setTimeout(_autoSave, 2000);
   }
 
   async function _autoSave() {
     const coupleId = AppAuth.currentCoupleId();
     if (!coupleId || !_canvas || _canvas.width < 10) return;
-    try {
-      const data = _canvas.toDataURL('image/jpeg', 0.75);
-      await DB.setSetting(coupleId, 'drawing', data);
-    } catch {}
+    try { await DB.setSetting(coupleId, 'drawing', _canvas.toDataURL('image/jpeg', 0.7)); } catch {}
   }
 
   async function _loadSaved() {
@@ -4258,26 +4366,38 @@ const PageDraw = (() => {
       const data = await DB.getSetting(coupleId, 'drawing');
       if (data?.startsWith('data:')) {
         const img = new Image();
-        img.onload = () => { _ctx.drawImage(img,0,0); _saveHistory(); };
+        img.onload = () => { _ctx.drawImage(img,0,0); _saveHistoryEntry(); };
         img.src = data;
       }
     } catch {}
   }
 
-  // ── Realtime broadcast ──
-  function _initRealtime() {
+  // ── Realtime ───────────────────────────────────────────────────────────────
+  function _broadcastStroke(type, x, y) {
+    if (!_channel) return;
     try {
-      const coupleId = AppAuth.currentCoupleId();
-      if (!coupleId) return;
+      _channel.send({ type:'broadcast', event:'stroke', payload:{
+        type, x, y, tool:_tool, color:_color, size:_size,
+        zoom:_zoom, panX:_panX, panY:_panY,
+        by: State.get('profile')?.id
+      }});
+    } catch {}
+  }
+
+  function _initRealtime() {
+    const coupleId = AppAuth.currentCoupleId();
+    if (!coupleId) return;
+    try {
       _channel = DB.client().channel('draw-' + coupleId);
-      _channel.on('broadcast', { event: 'stroke' }, ({ payload }) => {
-        if (payload.by === State.get('profile')?.id) return;
+      _channel.on('broadcast', { event:'stroke' }, ({ payload }) => {
+        if (!payload || payload.by === State.get('profile')?.id) return;
         _applyRemoteStroke(payload);
-        _showPartnerActivity();
-      });
-      _channel.on('broadcast', { event: 'cursor' }, ({ payload }) => {
-        if (payload.by === State.get('profile')?.id) return;
-        _showRemoteCursor(payload.x, payload.y);
+        const ps = document.getElementById('draw-partner-status');
+        const partner = State.get('partner');
+        if (ps && partner) {
+          ps.textContent = (partner.emoji||'✏️') + ' ' + partner.display_name + ' is drawing...';
+          clearTimeout(ps._t); ps._t = setTimeout(() => { ps.textContent=''; }, 2500);
+        }
       });
       _channel.subscribe();
     } catch {}
@@ -4285,48 +4405,20 @@ const PageDraw = (() => {
 
   function _applyRemoteStroke(p) {
     if (!_ctx) return;
-    const saved = { op: _ctx.globalCompositeOperation, alpha: _ctx.globalAlpha, color: _ctx.strokeStyle, width: _ctx.lineWidth };
-    _ctx.globalCompositeOperation = p.tool === 'eraser' ? 'destination-out' : 'source-over';
-    _ctx.globalAlpha = p.tool === 'marker' ? 0.5 : 1;
-    _ctx.strokeStyle = p.color; _ctx.lineWidth = p.size;
-    if (p.type === 'start') { _ctx.beginPath(); _ctx.moveTo(p.x, p.y); }
-    else if (p.type === 'move') { _ctx.lineTo(p.x, p.y); _ctx.stroke(); }
-    Object.assign(_ctx, { globalCompositeOperation: saved.op, globalAlpha: saved.alpha, strokeStyle: saved.color, lineWidth: saved.width });
-    if (p.type === 'end') _scheduleSave();
+    const saved = { op:_ctx.globalCompositeOperation, alpha:_ctx.globalAlpha, color:_ctx.strokeStyle, width:_ctx.lineWidth };
+    _ctx.globalCompositeOperation = p.tool==='eraser' ? 'destination-out' : 'source-over';
+    _ctx.globalAlpha  = p.tool==='marker' ? 0.45 : 1;
+    _ctx.strokeStyle  = p.color; _ctx.lineWidth = p.size;
+    _ctx.save();
+    _ctx.setTransform(p.zoom||1, 0, 0, p.zoom||1, p.panX||0, p.panY||0);
+    if (p.type==='start') { _ctx.beginPath(); _ctx.moveTo(p.x,p.y); }
+    else if (p.type==='move') { _ctx.lineTo(p.x,p.y); _ctx.stroke(); }
+    else if (p.type==='end') { _ctx.restore(); _scheduleSave(); }
+    _ctx.globalCompositeOperation = saved.op; _ctx.globalAlpha = saved.alpha;
+    _ctx.strokeStyle = saved.color; _ctx.lineWidth = saved.width;
   }
 
-  function _showRemoteCursor(x, y) {
-    const cur = document.getElementById('draw-cursor');
-    if (!cur || !_canvas) return;
-    const r = _canvas.getBoundingClientRect();
-    const cx = (x / _canvas.width) * r.width + r.left;
-    const cy = (y / _canvas.height) * r.height + r.top;
-    cur.style.cssText = `position:fixed;left:${cx}px;top:${cy}px;width:12px;height:12px;border-radius:50%;background:var(--rose);pointer-events:none;z-index:50;transform:translate(-50%,-50%);transition:left .05s,top .05s;display:block;opacity:.8`;
-  }
-
-  function _showPartnerActivity() {
-    const el = document.getElementById('draw-partner-status');
-    const partner = State.get('partner');
-    if (!el || !partner) return;
-    el.textContent = `${partner.emoji || '✏️'} ${partner.display_name} está dibujando...`;
-    clearTimeout(el._t);
-    el._t = setTimeout(() => { el.textContent = ''; }, 3000);
-  }
-
-  function _broadcast(type, x, y) {
-    if (!_channel) return;
-    try {
-      _channel.send({ type: 'broadcast', event: 'stroke', payload: {
-        type, x, y, tool: _tool, color: _color, size: _size,
-        by: State.get('profile')?.id
-      }});
-      if (type === 'move') {
-        _channel.send({ type: 'broadcast', event: 'cursor', payload: { x, y, by: State.get('profile')?.id }});
-      }
-    } catch {}
-  }
-
-  return { init, _setColor, _setSize, _setTool, _undo, _redo, _clear, _save };
+  return { init, _setColor, _setSize, _setTool, _undo, _redo, _clear, _save, _resetView };
 })();
 
 
