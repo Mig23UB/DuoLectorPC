@@ -1302,7 +1302,9 @@ a{text-decoration:none;color:inherit;cursor:pointer}
   <!-- Notifications panel -->
   <div id="notif-panel"></div>
   <!-- Modals -->
-  <div id="modal-overlay"></div>
+  <div id="modal-overlay" onclick="if(event.target===this)Modal.close()">
+    <div id="modal-box" class="modal-box"></div>
+  </div>
   <!-- Music player -->
   <div id="music-player-wrap"></div>
   <!-- Toast -->
@@ -2313,36 +2315,27 @@ const Toast = (() => {
 function toast(msg, d) { Toast.show(msg, d); }
 
 
-// ── Modal ────────────────────────────────────────────────────────────────────
+// ── Modal ─────────────────────────────────────────────────────────────────────
 const Modal = (() => {
-  function show({ title, content, footer, center = false }) {
-    const overlay = Utils.el('modal-overlay');
-    const box = Utils.el('modal-box');
-    box.className = 'modal-box' + (center ? ' center-modal' : '');
-    box.innerHTML = `
-      <div class="modal-handle"></div>
-      ${title ? `<div class="modal-title">${title}</div>` : ''}
-      <div class="modal-body">${content || ''}</div>
-      ${footer ? `<div class="modal-footer">${footer}</div>` : ''}
-    `;
-    overlay.style.display = 'block';
-    box.style.display = 'block';
-    requestAnimationFrame(() => {
-      overlay.style.opacity = '1';
-      box.style.transform = center ? 'translate(-50%, -50%)' : 'translateX(-50%) translateY(0)';
-      box.style.opacity = '1';
-    });
+  function show({ title, content, footer }) {
+    const overlay = document.getElementById('modal-overlay');
+    const box     = document.getElementById('modal-box');
+    if (!overlay || !box) { console.error('Modal elements missing'); return; }
+
+    box.innerHTML =
+      '<div class="modal-handle"></div>' +
+      (title ? '<div class="modal-title" style="padding:20px 20px 8px;font-family:\'Cormorant Garamond\',serif;font-size:1.25rem;font-weight:500">' + title + '</div>' : '') +
+      '<div class="modal-body">' + (content || '') + '</div>' +
+      (footer ? '<div class="modal-footer" style="padding:12px 20px 20px">' + footer + '</div>' : '');
+
+    overlay.classList.add('on');
+    document.body.style.overflow = 'hidden';
   }
 
   function close() {
-    const overlay = Utils.el('modal-overlay');
-    const box = Utils.el('modal-box');
-    overlay.style.opacity = '0';
-    box.style.opacity = '0';
-    setTimeout(() => {
-      overlay.style.display = 'none';
-      box.style.display = 'none';
-    }, 200);
+    const overlay = document.getElementById('modal-overlay');
+    if (overlay) overlay.classList.remove('on');
+    document.body.style.overflow = '';
   }
 
   return { show, close };
@@ -3430,7 +3423,7 @@ const PageLibrary = (() => {
     const lang   = State.get('profile')?.lang || 'en';
     if (!title) { if (window.toast) toast(lang==='ru'?'Введи название':'Enter a title'); return; }
 
-    const btn = document.querySelector('#modal-overlay .btn-primary');
+    const btn = document.querySelector('#modal-box .btn-primary');
     if (btn) { btn.textContent = 'Saving...'; btn.disabled = true; }
 
     const coupleId = AppAuth.currentCoupleId();
