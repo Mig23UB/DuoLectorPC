@@ -5547,14 +5547,22 @@ const AuthScreen = {
     if (this._loading) return;
     const email = Utils.el('auth-email')?.value?.trim();
     const pass  = Utils.el('auth-pass')?.value;
-    if (!email || !pass) { this._err('Completá todos los campos'); return; }
+    if (!email || !pass) { this._err('Fill in all fields'); return; }
     this._err('');
-    this._setLoading(true, 'Entrar');
+    this._setLoading(true, 'Sign In');
     try {
-      await DB.Auth.signIn(email, pass);
+      await AppAuth.login(email, pass);
+      // AppAuth.login handles navigation — if we get here without redirect, show error
     } catch(e) {
-      this._err(e.message === 'Invalid login credentials' ? 'Email o contraseña incorrectos' : e.message);
-      this._setLoading(false, 'Entrar');
+      const msg = e.message || '';
+      if (msg.includes('Invalid login') || msg.includes('invalid_credentials') || msg.includes('credentials')) {
+        this._err('Wrong email or password');
+      } else if (msg.includes('Email not confirmed')) {
+        this._err('Please confirm your email first, or contact support');
+      } else {
+        this._err(msg || 'Login error');
+      }
+      this._setLoading(false, 'Sign In');
     }
   },
 
@@ -5563,28 +5571,17 @@ const AuthScreen = {
     const name  = Utils.el('auth-name')?.value?.trim();
     const email = Utils.el('auth-email')?.value?.trim();
     const pass  = Utils.el('auth-pass')?.value;
-    if (!name || !email || !pass) { this._err('Completá todos los campos'); return; }
-    if (pass.length < 6) { this._err('La contraseña debe tener al menos 6 caracteres'); return; }
+    const lang  = Utils.el('auth-lang')?.value || 'en';
+    if (!name || !email || !pass) { this._err('Fill in all fields'); return; }
+    if (pass.length < 6) { this._err('Password must be at least 6 characters'); return; }
     this._err('');
-    this._setLoading(true, 'Crear cuenta');
+    this._setLoading(true, 'Create account');
     try {
-      const data = await DB.Auth.signUp(email, pass, name);
-      if (data?.user && !data.session) {
-        this._setLoading(false, 'Crear cuenta');
-        Utils.el('auth-form-area').innerHTML = `
-          <div style="text-align:center;padding:20px 0">
-            <div style="font-size:3rem;margin-bottom:12px">📧</div>
-            <div style="font-weight:600;margin-bottom:8px">¡Revisá tu email!</div>
-            <div style="font-size:.82rem;color:var(--muted)">
-              Te mandamos un link a <strong style="color:var(--text)">${email}</strong>
-            </div>
-            <div style="font-size:.75rem;color:var(--muted);margin-top:8px">Confirmá y volvé a iniciar sesión.</div>
-            <button class="btn btn-ghost btn-full" style="margin-top:16px" onclick="AuthScreen.setTab('login')">Ir al login</button>
-          </div>`;
-      }
+      await AppAuth.register(email, pass, name, lang);
+      // AppAuth.register signs up + signs in + loads context — handles navigation
     } catch(e) {
-      this._err(e.message);
-      this._setLoading(false, 'Crear cuenta');
+      this._err(e.message || 'Registration error');
+      this._setLoading(false, 'Create account');
     }
   },
 
