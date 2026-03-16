@@ -1443,7 +1443,17 @@ const DB = (() => {
     } catch { return false; }
   }
 
-  return { client, Auth, warmUp, get, insert, upsert, update, remove, uploadFile, getSetting, setSetting, ping };
+  // ── Keepalive: ping every 4 min to prevent free-tier sleep ──
+  function startKeepalive() {
+    // Immediate warmup
+    warmUp();
+    // Then every 4 minutes
+    setInterval(function() {
+      ping().catch(function(){});
+    }, 4 * 60 * 1000);
+  }
+
+  return { client, Auth, warmUp, get, insert, upsert, update, remove, uploadFile, getSetting, setSetting, ping, startKeepalive };
 })();
 
 
@@ -2583,8 +2593,18 @@ const PageHome = (() => {
     var ptTzLabel = partnerTz.split('/').pop().replace(/_/g,' ');
 
     html += '<div class="home-clocks">';
-    html += '<div class="clock-card"><div class="clock-flag">🕐</div><div class="clock-time display" id="clock-uy">--:--</div><div class="clock-label" style="font-size:.6rem">' + myTzLabel + '</div></div>';
-    html += '<div class="clock-card" style="border-color:rgba(224,120,144,.3)"><div class="clock-flag">🕐</div><div class="clock-time display" id="clock-ru">--:--</div><div class="clock-label" style="font-size:.6rem">' + ptTzLabel + '</div></div>';
+    html += '<div class="clock-card" onclick="PageHome._editMyTz()" style="cursor:pointer;position:relative" title="Edit timezone">' +
+      '<div style="position:absolute;top:5px;right:5px;font-size:.55rem;opacity:.4">✏️</div>' +
+      '<div class="clock-flag">🏙️</div>' +
+      '<div class="clock-time display" id="clock-uy">--:--</div>' +
+      '<div class="clock-label" style="font-size:.6rem">' + myTzLabel + '</div>' +
+    '</div>';
+    html += '<div class="clock-card" onclick="PageHome._editPartnerTz()" style="cursor:pointer;border-color:rgba(224,120,144,.3);position:relative" title="Partner timezone">' +
+      '<div style="position:absolute;top:5px;right:5px;font-size:.55rem;opacity:.4">✏️</div>' +
+      '<div class="clock-flag">' + (partner ? partner.emoji : '❤️') + '</div>' +
+      '<div class="clock-time display" id="clock-ru">--:--</div>' +
+      '<div class="clock-label" style="font-size:.6rem">' + ptTzLabel + '</div>' +
+    '</div>';
     html += '</div></div>';
 
     // Countdown
@@ -2678,232 +2698,440 @@ const PageHome = (() => {
     } catch {}
   }
 
-  return { init };
+  function _editMyTz() {
+    Router.go('config');
+    setTimeout(() => {
+      const el = document.getElementById('cfg-tz');
+      if (el) el.scrollIntoView({behavior:'smooth', block:'center'});
+    }, 300);
+  }
+
+  function _editPartnerTz() {
+    const partner = State.get('partner');
+    const lang = State.get('profile')?.lang || 'en';
+    if (!partner) {
+      if (window.toast) toast(lang==='ru'?'Паrtнёр не подключён':'No partner connected yet');
+      return;
+    }
+    if (window.toast) toast(lang==='ru'?
+      'Партнёр должен изменить свой часовой пояс в настройках':
+      'Your partner can change their timezone in their Settings');
+  }
+
+  return { init, _editMyTz, _editPartnerTz };
 })();
 
 
-// ── CHAT PAGE — Real-time with notifications ──────────────────────────────────
+// ── CHAT PAGE — Cinematic starry chat ─────────────────────────────────────────
 const PageChat = (() => {
-  let _pollInterval = null;
-  let _msgs = [];
-  let _channel = null;
+  let _msgs = [], _channel = null, _pollTimer = null, _chatRaf = null;
 
   function init(container) {
-    container.className += ' chat-wrap';
-    container.style.padding = '0';
-    container.innerHTML = `
-      <div class="chat-messages" id="chat-msgs">
-        <div style="text-align:center;padding:24px;color:var(--muted);font-size:.8rem">
-          <div style="font-size:2rem;margin-bottom:8px">💬</div>Cargando mensajes...
-        </div>
-      </div>
-      <div class="chat-typing" id="chat-typing" style="height:18px;padding:0 14px;font-size:.68rem;color:var(--muted)"></div>
-      <div class="chat-input-bar">
-        <textarea class="chat-textarea" id="chat-input" placeholder="Escribe algo bonito..." rows="1"
-          oninput="PageChat._resize(this)" onkeydown="PageChat._onKey(event)"></textarea>
-        <button class="chat-send-btn" onclick="PageChat.send()">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M22 2L11 13M22 2L15 22 11 13 2 9l20-7z"/></svg>
-        </button>
-      </div>
-    `;
-    _loadMessages();
+    container.style.cssText = 'padding:0;position:absolute;inset:0;display:flex;flex-direction:column;overflow:hidden';
+    const lang    = State.get('profile')?.lang || 'en';
+    const user    = State.get('profile');
+    const partner = State.get('partner');
+
+    container.innerHTML =
+      // Stars canvas — behind everything
+      '<canvas id="chat-stars" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:0"></canvas>' +
+
+      // Header
+      '<div style="position:relative;z-index:2;display:flex;align-items:center;gap:10px;padding:10px 14px;' +
+        'background:linear-gradient(180deg,var(--glass2) 0%,transparent 100%);' +
+        'border-bottom:1px solid rgba(255,255,255,.06);backdrop-filter:blur(24px);flex-shrink:0">' +
+        '<div style="width:40px;height:40px;background:linear-gradient(135deg,rgba(232,168,74,.25),rgba(224,120,144,.2));' +
+          'border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:1.4rem;' +
+          'border:1.5px solid rgba(232,168,74,.3);box-shadow:0 0 20px rgba(232,168,74,.15)">' +
+          (partner ? partner.emoji : '💬') + '</div>' +
+        '<div style="flex:1">' +
+          '<div style="font-weight:600;font-size:.92rem;letter-spacing:.01em">' +
+            (partner ? partner.display_name : (lang==='ru'?'Чат':'Chat')) + '</div>' +
+          '<div style="font-size:.62rem;color:var(--muted);display:flex;align-items:center;gap:5px;margin-top:1px">' +
+            '<span id="chat-dot" style="width:6px;height:6px;border-radius:50%;background:var(--dim);display:inline-block;transition:background .4s"></span>' +
+            '<span id="chat-status">' + (lang==='ru'?'Загрузка…':'Loading…') + '</span>' +
+          '</div>' +
+        '</div>' +
+        '<div id="chat-count" style="font-size:.6rem;color:var(--dim)"></div>' +
+      '</div>' +
+
+      // Messages area
+      '<div id="chat-msgs" style="position:relative;z-index:1;flex:1;overflow-y:auto;' +
+        'padding:16px 12px 8px;display:flex;flex-direction:column;gap:1px;' +
+        'scroll-behavior:smooth;overscroll-behavior:contain">' +
+        '<div style="flex:1"></div>' + // Pushes messages to bottom
+        '<div id="chat-msgs-inner" style="display:flex;flex-direction:column;gap:1px"></div>' +
+      '</div>' +
+
+      // Typing indicator
+      '<div id="chat-typing" style="position:relative;z-index:2;height:18px;' +
+        'padding:0 16px;font-size:.65rem;color:var(--muted);font-style:italic;flex-shrink:0"></div>' +
+
+      // Input bar
+      '<div style="position:relative;z-index:2;display:flex;align-items:flex-end;gap:8px;' +
+        'padding:8px 12px;padding-bottom:max(10px,env(safe-area-inset-bottom,10px));' +
+        'border-top:1px solid rgba(255,255,255,.06);' +
+        'background:linear-gradient(0deg,var(--glass2) 60%,transparent 100%);' +
+        'backdrop-filter:blur(24px);flex-shrink:0">' +
+        '<textarea id="chat-in" style="flex:1;background:rgba(255,255,255,.06);' +
+          'border:1.5px solid rgba(255,255,255,.1);border-radius:22px;' +
+          'padding:10px 16px;font-size:.88rem;color:var(--text);resize:none;' +
+          'line-height:1.5;max-height:120px;overflow-y:auto;transition:border-color .2s;' +
+          'font-family:inherit;backdrop-filter:blur(10px)" ' +
+          'placeholder="' + (lang==='ru'?'Напиши что-нибудь…':'Write something…') + '" rows="1" ' +
+          'oninput="PageChat._resize(this)" ' +
+          'onkeydown="PageChat._onKey(event)"></textarea>' +
+        '<button onclick="PageChat.send()" style="width:44px;height:44px;border-radius:50%;' +
+          'background:linear-gradient(135deg,var(--amber),#f0a060);border:none;cursor:pointer;' +
+          'display:flex;align-items:center;justify-content:center;flex-shrink:0;' +
+          'box-shadow:0 4px 16px rgba(232,168,74,.5);transition:all .2s;' +
+          'box-shadow:0 4px 16px rgba(232,168,74,.5);transition:all .2s">' +
+          '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2.5" stroke-linecap="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>' +
+        '</button>' +
+      '</div>';
+
+    _initStarsCanvas();
+    _loadMsgs();
     _initRealtime();
-    _startPolling(); // fallback
+    _startPolling();
+    _checkOnline();
   }
 
-  async function _loadMessages() {
-    const coupleId = AppAuth.currentCoupleId();
-    if (!coupleId) return;
+  // ── Beautiful stars background ─────────────────────────────────────────────
+  function _initStarsCanvas() {
+    const cv = document.getElementById('chat-stars');
+    if (!cv) return;
+    const ctx = cv.getContext('2d');
+    let W, H, stars = [], snowflakes = [], shooters = [];
+
+    function resize() {
+      const p = cv.parentElement; if (!p) return;
+      W = cv.width  = p.clientWidth  || window.innerWidth;
+      H = cv.height = p.clientHeight || window.innerHeight;
+      stars = Array.from({length:140}, () => ({
+        x: Math.random()*W, y: Math.random()*H,
+        r: Math.random()*1.4+0.2,
+        o: Math.random()*0.55+0.1,
+        sp: Math.random()*0.015+0.003,
+        ph: Math.random()*Math.PI*2,
+        c: Math.random()>0.85 ? '#b0c4ff' : '#ffffff'
+      }));
+      snowflakes = Array.from({length:60}, () => ({
+        x: Math.random()*W, y: Math.random()*H,
+        r: Math.random()*2+0.5,
+        vx: (Math.random()-.5)*0.3, vy: Math.random()*0.6+0.2,
+        o: Math.random()*0.5+0.2,
+        wobble: Math.random()*Math.PI*2, wobbleSpeed: Math.random()*0.02+0.005
+      }));
+    }
+    resize();
+    new ResizeObserver(resize).observe(cv.parentElement);
+
+    function spawnShooter() {
+      if (document.body.getAttribute('data-theme')==='light') return;
+      if (Math.random() > 0.003) return; // Very rare
+      shooters.push({
+        x: Math.random()*W*0.6, y: Math.random()*H*0.4,
+        vx: 4+Math.random()*5, vy: 2+Math.random()*3,
+        life: 1, maxLife: 0.7+Math.random()*0.5, tail: []
+      });
+    }
+
+    function draw() {
+      if (!document.getElementById('chat-stars')) { cancelAnimationFrame(_chatRaf); return; }
+      const isLight = document.body.getAttribute('data-theme')==='light';
+      ctx.clearRect(0, 0, W, H);
+
+      if (isLight) {
+        // Warm snow background
+        ctx.fillStyle = 'rgba(253,248,242,0.0)';
+        const t = Date.now()/1000;
+        snowflakes.forEach(f => {
+          f.wobble += f.wobbleSpeed;
+          f.x += f.vx + Math.sin(f.wobble)*0.3;
+          f.y += f.vy;
+          if (f.y > H+10) { f.y = -10; f.x = Math.random()*W; }
+          if (f.x > W+10) f.x = -10;
+          if (f.x < -10)  f.x = W+10;
+          ctx.beginPath();
+          ctx.arc(f.x, f.y, f.r, 0, Math.PI*2);
+          ctx.fillStyle = 'rgba(180,210,255,' + (f.o*0.8) + ')';
+          ctx.fill();
+        });
+      } else {
+        // Dark mode: twinkling stars
+        const t = Date.now()/1000;
+        stars.forEach(s => {
+          const o = s.o * (0.6 + 0.4 * Math.sin(t * s.sp * 30 + s.ph));
+          ctx.beginPath();
+          ctx.arc(s.x, s.y, s.r, 0, Math.PI*2);
+          ctx.fillStyle = s.c + Math.floor(o*255).toString(16).padStart(2,'0');
+          ctx.fill();
+        });
+
+        // Shooting stars
+        spawnShooter();
+        shooters = shooters.filter(s => s.life > 0);
+        shooters.forEach(s => {
+          s.tail.push({x:s.x, y:s.y, life:s.life});
+          if (s.tail.length > 18) s.tail.shift();
+          s.x += s.vx; s.y += s.vy; s.life -= 0.045;
+          // Draw tail
+          s.tail.forEach((pt, i) => {
+            const pct = i/s.tail.length;
+            ctx.beginPath(); ctx.arc(pt.x, pt.y, pct*1.5, 0, Math.PI*2);
+            ctx.fillStyle = 'rgba(255,255,240,' + (pt.life*pct*0.9) + ')';
+            ctx.fill();
+          });
+          // Draw head
+          ctx.beginPath(); ctx.arc(s.x, s.y, 1.8, 0, Math.PI*2);
+          ctx.fillStyle = 'rgba(255,255,255,' + s.life + ')';
+          ctx.fill();
+        });
+      }
+      _chatRaf = requestAnimationFrame(draw);
+    }
+    draw();
+  }
+
+  // ── Load messages ──────────────────────────────────────────────────────────
+  async function _loadMsgs() {
+    const coupleId = AppAuth.currentCoupleId(); if (!coupleId) return;
+
+    // Show cached instantly
+    const cached = LocalCache.getStale('chat_' + coupleId);
+    if (cached && cached.length) { _msgs = cached; _renderMsgs(); }
+
     try {
       const rows = await DB.get('messages', {
         eq: [['couple_id', coupleId]],
-        order: ['created_at', { ascending: true }],
-        limit: 100
+        order: ['created_at', {ascending: false}],
+        limit: 80
       });
-      _msgs = rows || [];
-      _renderMessages();
-      _scrollBottom();
-      if (_msgs.length) _markRead();
-    } catch (e) { console.error('chat load', e); }
+      _msgs = (rows || []).reverse();
+      LocalCache.set('chat_' + coupleId, _msgs);
+      _renderMsgs(true);
+      _updateStatus();
+    } catch(e) { console.error('chat load', e); }
   }
 
-  function _initRealtime() {
+  function _renderMsgs(scroll) {
+    const inner = document.getElementById('chat-msgs-inner');
+    if (!inner) return;
+    const userId = State.get('profile')?.id;
+    const partner = State.get('partner');
+    const user = State.get('profile');
+
+    if (!_msgs.length) {
+      const lang = State.get('profile')?.lang || 'en';
+      inner.innerHTML = '<div style="text-align:center;padding:30px 20px;font-family:\'Caveat\',cursive;font-size:1.15rem;color:var(--muted);line-height:1.8">' +
+        (lang==='ru'?'Начни разговор…\nПервое сообщение всегда особенное ✨':'Start the conversation…\nThe first message is always special ✨') +
+      '</div>';
+      return;
+    }
+
+    let html = '';
+    let lastDate = null;
+    _msgs.forEach((m, i) => {
+      const isMe = m.user_id === userId;
+      const prev = _msgs[i-1];
+      const sameUser = prev && prev.user_id === m.user_id;
+      const msgDate = new Date(m.created_at).toDateString();
+
+      // Date separator
+      if (msgDate !== lastDate) {
+        lastDate = msgDate;
+        const d = new Date(m.created_at);
+        const today = new Date().toDateString();
+        const yesterday = new Date(Date.now()-86400000).toDateString();
+        const label = msgDate === today ? 'Today' : msgDate === yesterday ? 'Yesterday' : d.toLocaleDateString('en',{month:'short',day:'numeric'});
+        html += '<div style="text-align:center;margin:14px 0 8px;position:relative">' +
+          '<span style="background:var(--glass2);border:1px solid var(--border);color:var(--muted);font-size:.6rem;padding:3px 10px;border-radius:20px;position:relative;z-index:1">' + label + '</span>' +
+        '</div>';
+      }
+
+      const time = new Date(m.created_at).toLocaleTimeString('en',{hour:'2-digit',minute:'2-digit'});
+      const emoji = isMe ? (user?.emoji||'😊') : (partner?.emoji||'👤');
+      const showAvatar = !sameUser || msgDate !== (prev ? new Date(prev.created_at).toDateString() : '');
+      const mb = (!_msgs[i+1] || _msgs[i+1]?.user_id !== m.user_id) ? '10px' : '2px';
+
+      html += '<div style="display:flex;flex-direction:' + (isMe?'row-reverse':'row') + ';align-items:flex-end;gap:7px;margin-bottom:' + mb + '">';
+
+      // Avatar
+      html += '<div style="width:28px;flex-shrink:0;' + (showAvatar?'':'visibility:hidden') + '">';
+      if (showAvatar) {
+        html += '<div style="width:28px;height:28px;border-radius:50%;background:' +
+          (isMe?'linear-gradient(135deg,rgba(232,168,74,.3),rgba(240,160,96,.2))':'linear-gradient(135deg,rgba(224,120,144,.3),rgba(167,139,250,.2))') +
+          ';display:flex;align-items:center;justify-content:center;font-size:.9rem;border:1px solid ' +
+          (isMe?'rgba(232,168,74,.2)':'rgba(224,120,144,.2)') + '">' + emoji + '</div>';
+      }
+      html += '</div>';
+
+      // Bubble
+      const bubbleColor = isMe
+        ? 'background:linear-gradient(135deg,rgba(232,168,74,.2),rgba(240,160,96,.15));border:1px solid rgba(232,168,74,.25)'
+        : 'background:linear-gradient(135deg,rgba(255,255,255,.06),rgba(255,255,255,.03));border:1px solid rgba(255,255,255,.1)';
+
+      html += '<div style="max-width:70%;' + bubbleColor + ';border-radius:' +
+        (isMe?'18px 4px 18px 18px':'4px 18px 18px 18px') +
+        ';padding:9px 13px;position:relative;backdrop-filter:blur(10px)">';
+      html += '<div style="font-size:.9rem;line-height:1.5;color:var(--text);word-break:break-word">' + Utils.escHtml(m.content) + '</div>';
+      html += '<div style="font-size:.55rem;color:var(--dim);margin-top:3px;text-align:' + (isMe?'right':'left') + '">' + time + '</div>';
+      html += '</div></div>';
+    });
+
+    inner.innerHTML = html;
+    if (scroll) {
+      const area = document.getElementById('chat-msgs');
+      if (area) area.scrollTop = area.scrollHeight;
+    }
+
+    const cnt = document.getElementById('chat-count');
+    if (cnt) cnt.textContent = _msgs.length + ' msgs';
+  }
+
+  function _resize(el) {
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+    _onTyping();
+  }
+
+  // ── Send ───────────────────────────────────────────────────────────────────
+  async function send() {
+    const inp = document.getElementById('chat-in');
+    if (!inp) return;
+    const text = inp.value.trim();
+    if (!text) return;
+    const user = State.get('profile');
     const coupleId = AppAuth.currentCoupleId();
-    if (!coupleId) return;
+    if (!user || !coupleId) return;
+
+    inp.value = ''; inp.style.height = 'auto';
+
+    // Optimistic — show immediately
+    const tempMsg = { id: 'temp_' + Date.now(), couple_id: coupleId, user_id: user.id, content: text, created_at: new Date().toISOString() };
+    _msgs.push(tempMsg);
+    _renderMsgs(true);
+
+    try {
+      const saved = await DB.insert('messages', { couple_id: coupleId, user_id: user.id, content: text });
+      // Replace temp with real
+      const idx = _msgs.findIndex(m => m.id === tempMsg.id);
+      if (idx !== -1) _msgs[idx] = saved;
+      LocalCache.set('chat_' + coupleId, _msgs);
+      _renderMsgs(false);
+      // Broadcast via realtime
+      if (_channel) _channel.send({type:'broadcast',event:'msg',payload:{msg:saved}}).catch(()=>{});
+      // KM
+      if (typeof KM !== 'undefined' && text.length >= 50) KM.addMessage && KM.addMessage();
+    } catch(e) {
+      _msgs = _msgs.filter(m => m.id !== tempMsg.id);
+      _renderMsgs(false);
+      if (window.toast) toast('⚠️ ' + e.message);
+    }
+  }
+
+  function _onKey(e) {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+  }
+
+  // ── Typing indicator ───────────────────────────────────────────────────────
+  let _typingTimer = null;
+  function _onTyping() {
+    const coupleId = AppAuth.currentCoupleId(); if (!coupleId) return;
+    const uid = State.get('profile')?.id;
+    try { DB.setSetting(coupleId, 'typing_' + uid, JSON.stringify({ts:Date.now()})); } catch {}
+    clearTimeout(_typingTimer);
+    _typingTimer = setTimeout(() => {
+      try { DB.setSetting(coupleId, 'typing_' + uid, JSON.stringify({ts:0})); } catch {}
+    }, 2500);
+  }
+
+  // ── Realtime ───────────────────────────────────────────────────────────────
+  function _initRealtime() {
+    const coupleId = AppAuth.currentCoupleId(); if (!coupleId) return;
     try {
       _channel = DB.client().channel('chat-' + coupleId);
-
-      // Listen for new messages via Supabase Realtime
-      _channel.on('postgres_changes', {
-        event: 'INSERT', schema: 'public', table: 'messages',
-        filter: `couple_id=eq.${coupleId}`
-      }, ({ new: msg }) => {
-        if (_msgs.find(m => m.id === msg.id)) return;
-        _msgs.push(msg);
-        if (_msgs.length > 200) _msgs = _msgs.slice(-200);
-        _appendMessage(msg);
-        _scrollBottom();
-
-        // Notification if from partner
-        const me = State.get('profile');
-        if (msg.user_id !== me?.id) {
-          Notifications.add({ text: `${msg.user_emoji || '💬'} ${msg.user_name}: ${msg.content.slice(0,40)}`, icon: '💬', ts: Date.now() });
-          // Show typing cleared
-          const t = document.getElementById('chat-typing');
-          if (t) t.textContent = '';
-        }
+      _channel.on('broadcast', {event:'msg'}, ({payload:p}) => {
+        if (!p?.msg) return;
+        const myId = State.get('profile')?.id;
+        if (p.msg.user_id === myId) return; // Already shown optimistically
+        if (_msgs.find(m => m.id === p.msg.id)) return;
+        _msgs.push(p.msg);
+        const coupleId = AppAuth.currentCoupleId();
+        LocalCache.set('chat_' + coupleId, _msgs);
+        _renderMsgs(true);
       });
-
-      // Typing indicator
-      _channel.on('broadcast', { event: 'typing' }, ({ payload }) => {
-        const me = State.get('profile');
-        if (payload.by === me?.id) return;
-        const t = document.getElementById('chat-typing');
-        if (!t) return;
-        const partner = State.get('partner');
-        t.textContent = `${partner?.emoji || '✍️'} ${partner?.display_name || '...'} está escribiendo...`;
-        clearTimeout(t._timer);
-        t._timer = setTimeout(() => { t.textContent = ''; }, 8000);
-      });
-
       _channel.subscribe();
     } catch {}
   }
 
-  // Fallback polling for environments where realtime is unavailable
   function _startPolling() {
-    if (_pollInterval) clearInterval(_pollInterval);
-    _pollInterval = setInterval(async () => {
-      if (Router.current() !== 'chat') { clearInterval(_pollInterval); return; }
-      const coupleId = AppAuth.currentCoupleId();
-      if (!coupleId) return;
+    if (_pollTimer) clearInterval(_pollTimer);
+    _pollTimer = setInterval(async () => {
+      if (Router.current() !== 'chat') { clearInterval(_pollTimer); return; }
+      const coupleId = AppAuth.currentCoupleId(); if (!coupleId) return;
       try {
-        const rows = await DB.get('messages', {
-          eq: [['couple_id', coupleId]],
-          order: ['created_at', { ascending: true }],
-          limit: 100
+        // Only load new messages since last one
+        const last = _msgs[_msgs.length-1];
+        let query = { eq:[['couple_id', coupleId]], order:['created_at',{ascending:true}], limit:20 };
+        const rows = await DB.get('messages', query);
+        if (!rows || !rows.length) return;
+        let changed = false;
+        rows.forEach(m => {
+          if (!_msgs.find(x => x.id === m.id)) { _msgs.push(m); changed = true; }
         });
-        const newMsgs = (rows || []).filter(r => !_msgs.find(m => m.id === r.id));
-        if (newMsgs.length) {
-          _msgs.push(...newMsgs);
-          newMsgs.forEach(m => _appendMessage(m));
-          _scrollBottom();
-          const me = State.get('profile');
-          newMsgs.filter(m => m.user_id !== me?.id).forEach(m => {
-            Notifications.add({ text: `${m.user_emoji || '💬'} ${m.user_name}: ${m.content.slice(0,40)}`, icon: '💬', ts: Date.now() });
-          });
+        if (changed) {
+          LocalCache.set('chat_' + coupleId, _msgs);
+          _renderMsgs(true);
+        }
+        // Check typing
+        const partner = State.get('partner');
+        if (partner) {
+          const raw = await DB.getSetting(coupleId, 'typing_' + partner.user_id);
+          const typing = document.getElementById('chat-typing');
+          if (typing && raw) {
+            const d = JSON.parse(raw);
+            if (Date.now() - d.ts < 3000) {
+              typing.textContent = (partner.emoji||'') + ' ' + partner.display_name + ' is typing…';
+            } else { typing.textContent = ''; }
+          }
         }
       } catch {}
-    }, 3000);
+    }, 8000);
   }
 
-  function _renderMessages() {
-    const el = document.getElementById('chat-msgs');
-    if (!el) return;
-    const me = State.get('profile');
-    let lastDate = null;
-    el.innerHTML = _msgs.map(m => {
-      const d = new Date(m.created_at).toDateString();
-      let divider = '';
-      if (d !== lastDate) {
-        lastDate = d;
-        divider = `<div class="msg-date-divider">${_formatDate(m.created_at)}</div>`;
-      }
-      return divider + _msgHtml(m, me);
-    }).join('');
-  }
-
-  function _appendMessage(m) {
-    const el = document.getElementById('chat-msgs');
-    if (!el) return;
-    const me = State.get('profile');
-    el.insertAdjacentHTML('beforeend', _msgHtml(m, me));
-  }
-
-  function _msgHtml(m, me) {
-    const mine = m.user_id === me?.id;
-    return `<div class="msg ${mine ? 'mine' : 'theirs'}">
-      <div class="msg-bubble">${Utils.escHtml(m.content)}</div>
-      <div class="msg-meta">
-        ${!mine ? `<span>${m.user_emoji || ''} ${m.user_name} · </span>` : ''}
-        <span>${new Date(m.created_at).toLocaleTimeString('es',{hour:'2-digit',minute:'2-digit'})}</span>
-      </div>
-    </div>`;
-  }
-
-  function _formatDate(ts) {
-    const d = new Date(ts);
-    const today = new Date();
-    const diff = Math.floor((today - d) / 86400000);
-    if (diff === 0) return 'Hoy';
-    if (diff === 1) return 'Ayer';
-    return d.toLocaleDateString('es', { weekday:'long', day:'numeric', month:'long' });
-  }
-
-  function _scrollBottom(smooth = false) {
-    const el = document.getElementById('chat-msgs');
-    if (el) el.scrollTo({ top: el.scrollHeight, behavior: smooth ? 'smooth' : 'auto' });
-  }
-
-  function _markRead() {
-    State.set('unreadMessages', 0);
-    const dot = document.getElementById('notif-dot');
-    if (dot) dot.style.display = 'none';
-  }
-
-  async function send() {
-    const input = document.getElementById('chat-input');
-    const text = input?.value?.trim();
-    if (!text) return;
-    input.value = '';
-    _resize(input);
-    const me = State.get('profile');
-    const coupleId = AppAuth.currentCoupleId();
-    if (!me || !coupleId) { if (window.toast) toast('⚠️ Sin sesión'); return; }
-
-    const optimistic = {
-      id: 'tmp-' + Date.now(),
-      content: text, user_id: me.id, user_name: me.display_name,
-      user_emoji: me.emoji, created_at: new Date().toISOString()
-    };
-    _msgs.push(optimistic);
-    _appendMessage(optimistic);
-    _scrollBottom(true);
-
+  async function _checkOnline() {
+    const coupleId = AppAuth.currentCoupleId(); if (!coupleId) return;
+    const uid = State.get('profile')?.id;
+    // Mark myself online
+    try { await DB.setSetting(coupleId, 'last_seen_' + uid, JSON.stringify({ts:Date.now()})); } catch {}
+    // Check partner
+    const partner = State.get('partner');
+    if (!partner) return;
     try {
-      await DB.insert('messages', {
-        couple_id: coupleId, user_id: me.id,
-        user_name: me.display_name, user_emoji: me.emoji, content: text,
-      });
-      if (typeof KM !== 'undefined') KM.addMsg(text);
-      // Remove optimistic, real one will come via realtime or polling
-      _msgs = _msgs.filter(m => m.id !== optimistic.id);
-    } catch { if (window.toast) toast('⚠️ Error enviando'); }
-  }
-
-  let _typingTimer = null;
-  function _resize(ta) {
-    ta.style.height = 'auto';
-    ta.style.height = Math.min(ta.scrollHeight, 120) + 'px';
-
-    // Broadcast typing
-    clearTimeout(_typingTimer);
-    _typingTimer = setTimeout(() => {
-      if (_channel) {
-        try {
-          _channel.send({ type:'broadcast', event:'typing', payload:{ by: State.get('profile')?.id }});
-        } catch {}
+      const raw = await DB.getSetting(coupleId, 'last_seen_' + partner.user_id);
+      const dot = document.getElementById('chat-dot');
+      const lbl = document.getElementById('chat-status');
+      if (!raw) return;
+      const diff = Date.now() - JSON.parse(raw).ts;
+      if (dot && lbl) {
+        if (diff < 3*60000) { dot.style.background='var(--mint)'; lbl.textContent='Online now'; }
+        else if (diff < 30*60000) { dot.style.background='var(--amber)'; lbl.textContent='Recently active'; }
+        else { dot.style.background='var(--dim)'; lbl.textContent='Offline'; }
       }
-    }, 300);
+    } catch {}
   }
 
-  function _onKey(e) {
-    if (e.key === 'Enter' && !e.shiftKey && window.innerWidth > 768) {
-      e.preventDefault(); send();
-    }
+  function _updateStatus() {
+    const lang = State.get('profile')?.lang || 'en';
+    const el = document.getElementById('chat-status');
+    if (el && el.textContent.includes('Loading')) el.textContent = _msgs.length + ' messages';
+    _checkOnline();
   }
 
-  return { init, send, _resize, _onKey };
+  return { init, send, _onKey, _onTyping, _resize };
 })();
 
 
@@ -3106,163 +3334,188 @@ const PageDiary = (() => {
 // ── LIBRARY PAGE ──────────────────────────────────────────────────────────────
 const PageLibrary = (() => {
 
-  async function init(container) {
-    // Show cached data instantly while loading fresh
-    const cached = State.cache('library');
-    if (cached) { _render(container, cached); }
-    else { container.innerHTML = '<div class="page-title display">Biblioteca 📚</div><div style="padding:40px;text-align:center"><div class="spinner"></div></div>'; }
-    var lang = State.get('profile') ? State.get('profile').lang || 'es' : 'es';
-    container.innerHTML =
-      '<div class="page-title display">' + (lang==='ru'?'Библиотека 📚':'Biblioteca 📚') + '</div>' +
-      '<div style="padding:20px;text-align:center"><div class="spinner"></div></div>';
-
-    var coupleId = AppAuth.currentCoupleId();
-    var books = [];
-
-    if (coupleId) {
-      try {
-        books = await DB.get('books', {
-          eq: [['couple_id', coupleId]],
-          order: ['created_at', { ascending: false }]
-        });
-      } catch (e) {
-        console.error('library load', e);
-      }
-    }
-
-    _render(container, books, lang);
+  function _skeleton() {
+    return '<div class="page-title display">Library 📚</div><div class="page-sub">Your shared books</div>' +
+      '<div style="padding:0 16px 12px"><div style="height:44px;background:var(--surface2);border-radius:var(--r-sm);animation:pulse 1.5s infinite"></div></div>' +
+      '<div style="padding:0 16px;display:flex;flex-direction:column;gap:8px">' +
+      Array(3).fill('<div style="height:76px;background:var(--surface2);border-radius:var(--r-sm);animation:pulse 1.5s infinite"></div>').join('') + '</div>';
   }
 
-  function _render(container, books, lang) {
-    var html =
-      '<div class="page-title display">' + (lang==='ru'?'Библиотека 📚':'Biblioteca 📚') + '</div>' +
-      '<div class="page-sub">' + (lang==='ru'?'Книги двоих':'Libros de los dos') + '</div>' +
-      '<div style="padding:0 16px 16px">' +
-        '<button class="btn btn-primary btn-full" onclick="PageLibrary._showAdd()">' +
-          (lang==='ru'?'📤 Добавить книгу':'📤 Agregar libro') +
-        '</button>' +
-      '</div>';
+  async function init(container) {
+    const cached = LocalCache.getStale('library');
+    if (cached) _render(container, cached);
+    else container.innerHTML = _skeleton();
 
-    if (books.length === 0) {
-      html +=
-        '<div style="padding:40px 20px;text-align:center">' +
-          '<div style="font-size:3rem;margin-bottom:12px;opacity:.3">📚</div>' +
-          '<div style="font-size:.9rem;color:var(--muted);margin-bottom:6px">' + (lang==='ru'?'Нет книг':'Sin libros aún') + '</div>' +
-          '<div style="font-size:.78rem;color:var(--dim)">' + (lang==='ru'?'Добавьте первую книгу':'Agregá el primer libro') + '</div>' +
-        '</div>';
+    const coupleId = AppAuth.currentCoupleId();
+    if (!coupleId) { _render(container, []); return; }
+    try {
+      const books = await DB.get('books', {
+        eq: [['couple_id', coupleId]],
+        order: ['created_at', { ascending: false }]
+      });
+      LocalCache.set('library', books || []);
+      _render(container, books || []);
+    } catch(e) {
+      console.error('library', e);
+      if (!cached) _render(container, []);
+    }
+  }
+
+  function _render(container, books) {
+    const lang = State.get('profile')?.lang || 'en';
+    let html = '<div class="page-title display">' + (lang==='ru'?'Библиотека 📚':'Library 📚') + '</div>';
+    html += '<div class="page-sub">' + (lang==='ru'?'Ваши книги вместе':'Your shared books') + '</div>';
+    html += '<div style="padding:0 16px 16px">' +
+      '<button class="btn btn-primary btn-full" onclick="PageLibrary._showAdd()">' +
+        (lang==='ru'?'📚 Добавить книгу':'📚 Add a book') +
+      '</button></div>';
+
+    if (!books.length) {
+      html += '<div style="padding:40px 20px;text-align:center">' +
+        '<div style="font-size:3rem;margin-bottom:12px;opacity:.3">📚</div>' +
+        '<div style="font-size:.9rem;color:var(--muted);margin-bottom:6px">' + (lang==='ru'?'Нет книг пока':'No books yet') + '</div>' +
+        '<div style="font-size:.78rem;color:var(--dim)">' + (lang==='ru'?'Добавь книгу и загрузи PDF':'Add a book and upload its PDF') + '</div>' +
+      '</div>';
     } else {
-      books.forEach(function(b) {
-        var pct = b.progress_pct || 0;
-        html +=
-          '<div class="card" style="display:flex;align-items:center;gap:14px;cursor:pointer;margin-bottom:8px" onclick="PageLibrary._open(' + "'" + b.id + "'" + ')">' +
-            '<div style="font-size:2rem;width:48px;height:48px;background:var(--surface2);border-radius:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0">' + (b.emoji||'📖') + '</div>' +
-            '<div style="flex:1;min-width:0">' +
-              '<div style="font-weight:600;font-size:.9rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + Utils.escHtml(b.title) + '</div>' +
-              '<div style="font-size:.75rem;color:var(--muted);margin-bottom:6px">' + Utils.escHtml(b.author||'') + '</div>' +
-              '<div style="height:5px;background:var(--surface2);border-radius:3px;overflow:hidden">' +
-                '<div style="height:100%;width:' + pct + '%;background:linear-gradient(90deg,var(--amber),var(--rose));border-radius:3px"></div>' +
-              '</div>' +
-              '<div style="font-size:.62rem;color:var(--muted);margin-top:3px">' + pct + '%</div>' +
+      books.forEach(b => {
+        const pct = b.progress_pct || 0;
+        html += '<div class="card" style="display:flex;align-items:center;gap:14px;cursor:pointer;margin-bottom:8px" onclick="PageLibrary._open(' + JSON.stringify(JSON.stringify(b)).slice(1,-1) + ')">' +
+          '<div style="width:48px;height:48px;background:linear-gradient(135deg,var(--amber-s),var(--rose-s));border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:1.5rem;flex-shrink:0">' + (b.emoji||'📖') + '</div>' +
+          '<div style="flex:1;min-width:0">' +
+            '<div style="font-weight:600;font-size:.9rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + Utils.escHtml(b.title) + '</div>' +
+            '<div style="font-size:.72rem;color:var(--muted);margin-bottom:6px">' + Utils.escHtml(b.author||'') + '</div>' +
+            '<div style="height:4px;background:var(--surface2);border-radius:2px;overflow:hidden">' +
+              '<div style="height:100%;width:' + pct + '%;background:linear-gradient(90deg,var(--amber),var(--rose));border-radius:2px;transition:width .5s"></div>' +
             '</div>' +
-          '</div>';
+            '<div style="font-size:.6rem;color:var(--muted);margin-top:2px">' + pct + '% read</div>' +
+          '</div>' +
+          '<button onclick="event.stopPropagation();PageLibrary._delete(\'' + b.id + '\')" style="width:28px;height:28px;border-radius:50%;background:var(--surface2);border:none;color:var(--muted);cursor:pointer;flex-shrink:0;font-size:.65rem">✕</button>' +
+        '</div>';
       });
     }
-
     container.innerHTML = html;
   }
 
-  async function _open(id) {
-    var lang = State.get('profile') ? State.get('profile').lang || 'es' : 'es';
-    var coupleId = AppAuth.currentCoupleId();
-    try {
-      var books = await DB.get('books', { eqOne: ['id', id] });
-      if (!books[0]) { if (window.toast) toast(lang==='ru'?'⚠️ Книга не найдена':'⚠️ Libro no encontrado'); return; }
-      State.set('currentBook', books[0]);
-      if (coupleId) {
-        try { await DB.setSetting(coupleId, 'current_book_id', id); } catch {}
-      }
-      Router.go('reader');
-    } catch (e) {
-      if (window.toast) toast('⚠️ ' + e.message);
-    }
+  function _showAdd() {
+    const lang = State.get('profile')?.lang || 'en';
+    Modal.show({
+      title: lang==='ru'?'📚 Добавить книгу':'📚 Add a book',
+      content:
+        '<div class="form-group"><label class="input-label">Title *</label>' +
+        '<input class="input-field" id="bk-title" placeholder="' + (lang==='ru'?'Название':'Book title') + '" autocomplete="off"></div>' +
+        '<div class="form-group"><label class="input-label">Author</label>' +
+        '<input class="input-field" id="bk-author" placeholder="' + (lang==='ru'?'Автор':'Author') + '"></div>' +
+        '<div class="form-group"><label class="input-label">Emoji</label>' +
+        '<input class="input-field" id="bk-emoji" placeholder="📖" style="font-size:1.5rem;text-align:center" maxlength="4" value="📖"></div>' +
+        '<div class="form-group"><label class="input-label">Your PDF (optional)</label>' +
+        '<div id="pdf-drop-a" style="border:1.5px dashed var(--border2);border-radius:var(--r-sm);padding:14px;text-align:center;cursor:pointer;font-size:.8rem;color:var(--muted)" ' +
+        'onclick="document.getElementById(\'bk-file-a\').click()" ' +
+        'ondragover="event.preventDefault();this.style.borderColor=\'var(--amber)\'" ' +
+        'ondragleave="this.style.borderColor=\'\'" ' +
+        'ondrop="event.preventDefault();this.style.borderColor=\'\';PageLibrary._handleFileDrop(event,\'a\')">' +
+        '📄 Click or drag PDF here</div>' +
+        '<input type="file" id="bk-file-a" accept=".pdf,.txt" style="display:none" onchange="PageLibrary._handleFile(event,\'a\')"></div>' +
+        '<div class="form-group"><label class="input-label">Partner\'s PDF (optional)</label>' +
+        '<div id="pdf-drop-b" style="border:1.5px dashed var(--border2);border-radius:var(--r-sm);padding:14px;text-align:center;cursor:pointer;font-size:.8rem;color:var(--muted)" ' +
+        'onclick="document.getElementById(\'bk-file-b\').click()" ' +
+        'ondragover="event.preventDefault();this.style.borderColor=\'var(--amber)\'" ' +
+        'ondragleave="this.style.borderColor=\'\'" ' +
+        'ondrop="event.preventDefault();this.style.borderColor=\'\';PageLibrary._handleFileDrop(event,\'b\')">' +
+        '📄 Click or drag PDF here (translated version)</div>' +
+        '<input type="file" id="bk-file-b" accept=".pdf,.txt" style="display:none" onchange="PageLibrary._handleFile(event,\'b\')">',
+      footer: '<button class="btn btn-primary btn-full" onclick="PageLibrary._save()">💾 Save book</button>'
+    });
+    // Store pending files
+    PageLibrary._pendingFiles = { a: null, b: null };
   }
 
-  function _showAdd() {
-    var lang = State.get('profile') ? State.get('profile').lang || 'es' : 'es';
-    Modal.show({
-      title: lang==='ru'?'📤 Добавить книгу':'📤 Agregar libro',
-      content:
-        '<div class="form-group">' +
-          '<label class="input-label">' + (lang==='ru'?'Название':'Título') + '</label>' +
-          '<input class="input-field" id="lib-title" placeholder="' + (lang==='ru'?'Название книги':'Título del libro') + '">' +
-        '</div>' +
-        '<div class="form-group">' +
-          '<label class="input-label">' + (lang==='ru'?'Автор (необязательно)':'Autor (opcional)') + '</label>' +
-          '<input class="input-field" id="lib-author" placeholder="' + (lang==='ru'?'Автор':'Autor') + '">' +
-        '</div>' +
-        '<div class="form-group">' +
-          '<label class="input-label">' + (lang==='ru'?'PDF файл (твоя версия)':'Archivo PDF (tu versión)') + '</label>' +
-          '<div style="background:var(--surface);border:1.5px dashed var(--border2);border-radius:var(--r-sm);padding:16px;text-align:center;cursor:pointer" onclick="document.getElementById(\'lib-file\').click()">' +
-            '<div style="font-size:1.5rem;margin-bottom:6px">📄</div>' +
-            '<div style="font-size:.82rem;color:var(--muted)">' + (lang==='ru'?'Нажмите или перетащите PDF':'Click o arrastrá el PDF') + '</div>' +
-            '<div id="lib-file-name" style="font-size:.75rem;color:var(--amber);margin-top:6px"></div>' +
-          '</div>' +
-          '<input type="file" id="lib-file" accept=".pdf,.txt" style="display:none" onchange="document.getElementById(\'lib-file-name\').textContent=this.files[0]?this.files[0].name:\'\'">' +
-        '</div>',
-      footer: '<button class="btn btn-primary btn-full" onclick="PageLibrary._save()">' + (lang==='ru'?'💾 Сохранить':'💾 Guardar') + '</button>'
-    });
+  function _handleFile(e, pane) {
+    const f = e.target.files[0]; if (!f) return;
+    PageLibrary._pendingFiles = PageLibrary._pendingFiles || {};
+    PageLibrary._pendingFiles[pane] = f;
+    const dropEl = document.getElementById('pdf-drop-' + pane);
+    if (dropEl) { dropEl.style.borderColor='var(--mint)'; dropEl.textContent='✓ ' + f.name; }
+  }
+
+  function _handleFileDrop(e, pane) {
+    const f = e.dataTransfer.files[0]; if (!f) return;
+    PageLibrary._pendingFiles = PageLibrary._pendingFiles || {};
+    PageLibrary._pendingFiles[pane] = f;
+    const dropEl = document.getElementById('pdf-drop-' + pane);
+    if (dropEl) { dropEl.style.borderColor='var(--mint)'; dropEl.textContent='✓ ' + f.name; }
   }
 
   async function _save() {
-    var title  = Utils.el('lib-title') ? Utils.el('lib-title').value.trim() : '';
-    var author = Utils.el('lib-author') ? Utils.el('lib-author').value.trim() : '';
-    var fileEl = Utils.el('lib-file');
-    var file   = fileEl && fileEl.files[0] ? fileEl.files[0] : null;
-    var lang   = State.get('profile') ? State.get('profile').lang || 'es' : 'es';
+    const title  = Utils.el('bk-title')?.value?.trim();
+    const author = Utils.el('bk-author')?.value?.trim();
+    const emoji  = Utils.el('bk-emoji')?.value?.trim() || '📖';
+    const lang   = State.get('profile')?.lang || 'en';
+    if (!title) { if (window.toast) toast(lang==='ru'?'Введи название':'Enter a title'); return; }
 
-    if (!title) { if (window.toast) toast(lang==='ru'?'Введите название':'Ingresá un título'); return; }
+    const btn = document.querySelector('#modal-overlay .btn-primary');
+    if (btn) { btn.textContent = 'Saving...'; btn.disabled = true; }
 
-    var coupleId = AppAuth.currentCoupleId();
-    if (!coupleId) { if (window.toast) toast('⚠️ Sin pareja'); return; }
-
-    var btn = document.querySelector('#modal-overlay .btn-primary');
-    if (btn) { btn.textContent = lang==='ru'?'Сохраняю...':'Guardando...'; btn.disabled = true; }
+    const coupleId = AppAuth.currentCoupleId();
+    if (!coupleId) { if (window.toast) toast('⚠️ No couple found'); return; }
 
     try {
-      var fileUrl = null;
-      if (file) {
-        try {
-          var path = coupleId + '/' + Date.now() + '-' + file.name;
-          fileUrl = await DB.uploadFile('pdfs', path, file);
-        } catch (e) {
-          console.warn('upload failed, saving without file:', e);
-        }
+      let fileUrlA = null, fileUrlB = null;
+      const files = PageLibrary._pendingFiles || {};
+
+      if (files.a instanceof File) {
+        try { fileUrlA = await DB.uploadFile('pdfs', coupleId+'/'+Date.now()+'-a-'+files.a.name, files.a); } catch(e) { console.warn('upload A', e); }
+      }
+      if (files.b instanceof File) {
+        try { fileUrlB = await DB.uploadFile('pdfs', coupleId+'/'+Date.now()+'-b-'+files.b.name, files.b); } catch(e) { console.warn('upload B', e); }
       }
 
-      var book = await DB.insert('books', {
-        couple_id: coupleId,
-        title: title,
-        author: author,
-        emoji: '📖',
-        file_url: fileUrl,
-        progress_pct: 0,
-        created_by: State.get('user') ? State.get('user').id : null
+      const book = await DB.insert('books', {
+        couple_id: coupleId, title, author, emoji,
+        file_url: fileUrlA, file_url_translated: fileUrlB, progress_pct: 0
       });
 
+      const cached = LocalCache.getStale('library') || [];
+      cached.unshift(book);
+      LocalCache.set('library', cached);
+      State.invalidate && State.invalidate('library');
       Modal.close();
-      if (window.toast) toast(lang==='ru'?'📚 Книга добавлена':'📚 Libro agregado');
+      if (window.toast) toast('📚 ' + (lang==='ru'?'Книга добавлена':'Book added'));
 
-      // Open reader directly
-      State.set('currentBook', book);
-      try { await DB.setSetting(coupleId, 'current_book_id', book.id); } catch {}
-      Router.go('reader');
-    } catch (e) {
+      const c = document.getElementById('page-library');
+      if (c) _render(c, cached);
+    } catch(e) {
+      console.error('save book', e);
       if (window.toast) toast('⚠️ ' + e.message);
-      if (btn) { btn.textContent = lang==='ru'?'💾 Сохранить':'💾 Guardar'; btn.disabled = false; }
+      if (btn) { btn.textContent = '💾 Save book'; btn.disabled = false; }
     }
   }
 
-  return { init, _open, _showAdd, _save };
+  async function _open(bookJson) {
+    let book;
+    try { book = typeof bookJson === 'string' ? JSON.parse(bookJson) : bookJson; } catch { return; }
+    State.set('currentBook', book);
+    LocalCache.set('current_book', book);
+    const coupleId = AppAuth.currentCoupleId();
+    if (coupleId) {
+      try { await DB.setSetting(coupleId, 'current_book_id', book.id); } catch {}
+    }
+    Router.go('reader');
+  }
+
+  async function _delete(id) {
+    const lang = State.get('profile')?.lang || 'en';
+    if (!confirm(lang==='ru'?'Удалить книгу?':'Delete this book?')) return;
+    try {
+      await DB.remove('books', { id });
+      const cached = (LocalCache.getStale('library') || []).filter(b => b.id !== id);
+      LocalCache.set('library', cached);
+      const c = document.getElementById('page-library');
+      if (c) _render(c, cached);
+      if (window.toast) toast('🗑 ' + (lang==='ru'?'Удалено':'Deleted'));
+    } catch(e) { if (window.toast) toast('⚠️ ' + e.message); }
+  }
+
+  return { init, _showAdd, _save, _open, _delete, _handleFile, _handleFileDrop };
 })();
 
 
@@ -4008,417 +4261,409 @@ const PageMusic = (() => {
 })();
 
 
-// ── DRAW PAGE — Infinite canvas with pinch zoom ───────────────────────────────
+// ── DRAW PAGE — Infinite canvas, pinch zoom, pan ──────────────────────────────
 const PageDraw = (() => {
-  let _canvas, _ctx;
-  let _tool = 'pen', _color = '#e8a84a', _size = 5;
-  let _drawing = false;
-  let _history = [], _histPos = -1;
-  let _saveTimeout = null, _channel = null;
+  // Canvas & context
+  let _cv, _ctx, _cnt;
+  // Virtual canvas (large offscreen buffer for infinite feel)
+  let _vc, _vctx;
+  const VSIZE = 3000; // virtual canvas size
 
-  // Pan & zoom state
-  let _zoom  = 1;
-  let _panX  = 0, _panY  = 0;
-  let _lastPinchDist = null;
-  let _lastPanX = 0, _lastPanY = 0;
-  let _isPanning = false;
-  let _pinching = false;
+  // Tool state
+  let _tool = 'pen', _color = '#e8a84a', _size = 4;
 
-  const COLORS = ['#f0ede8','#e8a84a','#e07890','#7ec8e3','#70c8a0','#a78bfa','#ff6b6b','#ffd93d','#000000','#ffffff'];
+  // Draw state
+  let _drawing = false, _lastX = 0, _lastY = 0;
 
+  // Viewport (pan + zoom)
+  let _vpx = 0, _vpy = 0, _zoom = 1;
+
+  // Touch
+  let _touches = {}, _lastPinchDist = null, _lastMidX = 0, _lastMidY = 0;
+
+  // Pan with mouse
+  let _panning = false, _panStartX = 0, _panStartY = 0, _panVpx = 0, _panVpy = 0;
+
+  // Persist
+  let _saveTimer = null;
+  let _channel = null;
+
+  const COLORS = ['#e8a84a','#e07890','#7ec8e3','#70c8a0','#a78bfa','#f0ede8','#ff6b6b','#ffd93d','#4a4a5a','#ffffff'];
+
+  // ── Init ──────────────────────────────────────────────────────────────────
   function init(container) {
-    container.style.cssText = 'padding:0;position:absolute;inset:0;display:flex;flex-direction:column;overflow:hidden';
-
+    container.style.cssText = 'padding:0;position:absolute;inset:0;display:flex;flex-direction:column;overflow:hidden;background:var(--bg)';
     const lang = State.get('profile')?.lang || 'en';
+
     const colBtns = COLORS.map(c =>
-      '<button class="draw-color-btn' + (c===_color?' active':'') + '" style="background:' + c + '" onclick="PageDraw._setColor(\'' + c + '\',this)" data-c="' + c + '"></button>'
+      '<div class="draw-color-btn' + (c===_color?' active':'') + '" style="background:' + c + ';width:20px;height:20px;border-radius:50%;cursor:pointer;flex-shrink:0;border:2px solid ' + (c===_color?'var(--text)':'transparent') + ';transition:transform .12s" onclick="PageDraw._pickColor(\'' + c + '\',this)"></div>'
     ).join('');
 
     container.innerHTML =
-      '<div class="draw-toolbar">' +
-        '<div class="draw-tools">' +
-          '<button class="draw-tool-btn active" id="dt-pen" onclick="PageDraw._setTool(\'pen\')" title="Pen"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button>' +
-          '<button class="draw-tool-btn" id="dt-marker" onclick="PageDraw._setTool(\'marker\')" title="Marker"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="3" y1="8" x2="21" y2="8"/><line x1="3" y1="16" x2="21" y2="16"/></svg></button>' +
-          '<button class="draw-tool-btn" id="dt-eraser" onclick="PageDraw._setTool(\'eraser\')" title="Eraser"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 20H7L3 16l10-10 7 7-3.5 3.5"/></svg></button>' +
-          '<button class="draw-tool-btn" id="dt-pan" onclick="PageDraw._setTool(\'pan\')" title="Pan / Move"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 9l-3 3 3 3M9 5l3-3 3 3M15 19l-3 3-3-3M19 9l3 3-3 3M12 12h.01"/><path d="M12 7v5m0 0l-2-2m2 2l2-2M12 12v5m0 0l-2-2m2 2l2-2"/></svg></button>' +
+      // Toolbar
+      '<div style="display:flex;align-items:center;gap:4px;padding:5px 8px;background:var(--glass2);border-bottom:1px solid var(--border);flex-shrink:0;overflow-x:auto;-webkit-overflow-scrolling:touch">' +
+        // Tools
+        '<div style="display:flex;gap:3px;margin-right:4px;flex-shrink:0">' +
+          _toolBtn('pen','✏️','Pen') + _toolBtn('marker','🖊','Marker') +
+          _toolBtn('eraser','◻','Eraser') + _toolBtn('pan','✋','Pan') +
         '</div>' +
-        '<div class="draw-colors">' + colBtns +
-          '<input type="color" value="' + _color + '" style="width:22px;height:22px;border:none;border-radius:50%;cursor:pointer;background:none;padding:0;flex-shrink:0" oninput="PageDraw._setColor(this.value)">' +
+        '<div style="width:1px;height:24px;background:var(--border);flex-shrink:0;margin:0 2px"></div>' +
+        // Colors
+        '<div style="display:flex;gap:3px;align-items:center;flex-shrink:0">' + colBtns +
+          '<input type="color" value="' + _color + '" style="width:20px;height:20px;border:none;border-radius:50%;cursor:pointer;background:none;padding:0;flex-shrink:0;overflow:hidden" oninput="PageDraw._pickColor(this.value)">' +
         '</div>' +
-        '<div class="draw-size-wrap">' +
-          '<input type="range" min="1" max="60" value="' + _size + '" class="draw-size-slider" oninput="PageDraw._setSize(+this.value)">' +
-          '<div class="draw-size-dot" id="dsd" style="width:' + _size + 'px;height:' + _size + 'px;background:' + _color + ';border-radius:50%;flex-shrink:0;min-width:4px;min-height:4px;max-width:30px;max-height:30px;transition:all .18s"></div>' +
+        '<div style="width:1px;height:24px;background:var(--border);flex-shrink:0;margin:0 2px"></div>' +
+        // Size
+        '<div style="display:flex;align-items:center;gap:5px;flex-shrink:0">' +
+          '<input type="range" min="1" max="50" value="' + _size + '" style="width:70px;accent-color:var(--amber)" oninput="PageDraw._pickSize(+this.value)" id="sz-slider">' +
+          '<div id="sz-dot" style="width:' + Math.min(_size,18) + 'px;height:' + Math.min(_size,18) + 'px;background:' + _color + ';border-radius:50%;transition:all .15s;flex-shrink:0;min-width:3px;min-height:3px"></div>' +
         '</div>' +
-        '<div class="draw-actions">' +
-          '<button class="draw-action-btn" onclick="PageDraw._undo()" title="Undo"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg></button>' +
-          '<button class="draw-action-btn" onclick="PageDraw._redo()" title="Redo"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 14 20 9 15 4"/><path d="M4 20v-7a4 4 0 0 1 4-4h12"/></svg></button>' +
-          '<button class="draw-action-btn" onclick="PageDraw._clear()" title="Clear"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/></svg></button>' +
-          '<button class="draw-action-btn" onclick="PageDraw._resetView()" title="Reset view">⌂</button>' +
-          '<button class="draw-action-btn" onclick="PageDraw._save()" title="Save"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>' +
+        '<div style="width:1px;height:24px;background:var(--border);flex-shrink:0;margin:0 2px"></div>' +
+        // Actions
+        '<div style="display:flex;gap:3px;flex-shrink:0;margin-left:auto">' +
+          _actionBtn('↩','PageDraw._undo()','Undo') +
+          _actionBtn('↪','PageDraw._redo()','Redo') +
+          _actionBtn('⌂','PageDraw._resetView()','Reset view') +
+          _actionBtn('🗑','PageDraw._clear()','Clear') +
+          _actionBtn('↓','PageDraw._savePng()','Save PNG') +
         '</div>' +
       '</div>' +
-
-      // Zoom indicator
-      '<div style="position:absolute;bottom:32px;right:10px;z-index:10;background:var(--glass2);border:1px solid var(--border);border-radius:8px;padding:3px 8px;font-size:.65rem;color:var(--muted);pointer-events:none" id="zoom-ind">100%</div>' +
-
-      '<div class="draw-canvas-container" id="draw-cnt" style="flex:1;overflow:hidden;position:relative;cursor:crosshair">' +
-        '<canvas id="draw-canvas"></canvas>' +
-        '<div class="draw-who" id="draw-who"></div>' +
+      // Canvas container
+      '<div id="draw-cnt" style="flex:1;overflow:hidden;position:relative;cursor:crosshair;touch-action:none">' +
+        '<canvas id="draw-cv" style="position:absolute;top:0;left:0"></canvas>' +
       '</div>' +
-
-      '<div style="padding:3px 10px;display:flex;align-items:center;justify-content:space-between;background:var(--glass2);border-top:1px solid var(--border);flex-shrink:0;font-size:.62rem">' +
-        '<span id="draw-partner-status" style="color:var(--muted)"></span>' +
-        '<span style="color:var(--dim)">Pinch to zoom · ' + (lang==='ru'?'Авто-сохранение':'Auto-save') + '</span>' +
+      // Status bar
+      '<div style="display:flex;align-items:center;justify-content:space-between;padding:3px 10px;background:var(--glass2);border-top:1px solid var(--border);flex-shrink:0;font-size:.6rem;color:var(--dim)">' +
+        '<span id="draw-partner-info"></span>' +
+        '<span id="draw-zoom-lbl">100% · Pinch or scroll to zoom</span>' +
       '</div>';
 
-    _initCanvas();
+    _cnt = document.getElementById('draw-cnt');
+    _cv  = document.getElementById('draw-cv');
+    _ctx = _cv.getContext('2d');
+
+    // Virtual canvas
+    _vc   = document.createElement('canvas');
+    _vc.width = _vc.height = VSIZE;
+    _vctx = _vc.getContext('2d');
+    _vctx.fillStyle = 'rgba(0,0,0,0)';
+    _vctx.clearRect(0, 0, VSIZE, VSIZE);
+
+    // Start viewport centered
+    _vpx = -(VSIZE/2 - _cnt.clientWidth/2);
+    _vpy = -(VSIZE/2 - _cnt.clientHeight/2);
+
+    _resizeCanvas();
+    new ResizeObserver(_resizeCanvas).observe(_cnt);
+
+    // Events — mouse
+    _cv.addEventListener('mousedown',  _md);
+    _cv.addEventListener('mousemove',  _mm);
+    window.addEventListener('mouseup', _mu);
+    _cv.addEventListener('wheel',      _mw, {passive:false});
+
+    // Events — touch
+    _cv.addEventListener('touchstart', _ts, {passive:false});
+    _cv.addEventListener('touchmove',  _tm, {passive:false});
+    _cv.addEventListener('touchend',   _te, {passive:false});
+    _cv.addEventListener('touchcancel',_te, {passive:false});
+
     _loadSaved();
     _initRealtime();
   }
 
-  function _initCanvas() {
-    _canvas = document.getElementById('draw-canvas');
-    if (!_canvas) return;
-    _ctx = _canvas.getContext('2d');
-
-    const cnt = document.getElementById('draw-cnt');
-    new ResizeObserver(_resize).observe(cnt);
-    _resize();
-
-    // Mouse events
-    _canvas.addEventListener('mousedown',  _onMouseDown);
-    _canvas.addEventListener('mousemove',  _onMouseMove);
-    _canvas.addEventListener('mouseup',    _onMouseUp);
-    _canvas.addEventListener('mouseleave', _onMouseUp);
-    _canvas.addEventListener('wheel',      _onWheel, {passive:false});
-
-    // Touch events — pinch zoom + draw
-    _canvas.addEventListener('touchstart', _onTouchStart, {passive:false});
-    _canvas.addEventListener('touchmove',  _onTouchMove,  {passive:false});
-    _canvas.addEventListener('touchend',   _onTouchEnd,   {passive:false});
+  function _toolBtn(id, icon, title) {
+    return '<button id="tb-' + id + '" onclick="PageDraw._pickTool(\'' + id + '\')" title="' + title + '" style="width:30px;height:30px;border-radius:7px;border:none;cursor:pointer;font-size:1rem;display:flex;align-items:center;justify-content:center;background:' + (id===_tool?'var(--amber)':'var(--surface2)') + ';color:' + (id===_tool?'#000':'var(--text2)') + ';transition:all .15s">' + icon + '</button>';
+  }
+  function _actionBtn(icon, fn, title) {
+    return '<button onclick="' + fn + '" title="' + title + '" style="width:28px;height:28px;border-radius:7px;border:none;cursor:pointer;font-size:.85rem;display:flex;align-items:center;justify-content:center;background:var(--surface2);color:var(--text2)">' + icon + '</button>';
   }
 
-  function _resize() {
-    if (!_canvas) return;
-    const cnt = document.getElementById('draw-cnt');
-    if (!cnt) return;
-    const w = cnt.clientWidth, h = cnt.clientHeight;
-    if (w < 10 || h < 10) return;
-    // Save and restore drawing
-    const saved = _canvas.width > 10 ? _canvas.toDataURL() : null;
-    _canvas.width  = w;
-    _canvas.height = h;
-    _canvas.style.position = 'absolute';
-    _canvas.style.inset = '0';
-    _canvas.style.width  = '100%';
-    _canvas.style.height = '100%';
-    _applyStyle();
-    if (saved) { const img = new Image(); img.onload = () => _ctx.drawImage(img,0,0); img.src = saved; }
-    _saveHistoryEntry();
+  // ── Resize ─────────────────────────────────────────────────────────────────
+  function _resizeCanvas() {
+    if (!_cnt || !_cv) return;
+    const w = _cnt.clientWidth, h = _cnt.clientHeight;
+    if (w < 1 || h < 1) return;
+    _cv.width  = w;
+    _cv.height = h;
+    _redraw();
   }
 
-  // ── Coordinate transforms ──────────────────────────────────────────────────
-  function _screenToCanvas(sx, sy) {
-    return { x: (sx - _panX) / _zoom, y: (sy - _panY) / _zoom };
-  }
-
-  // ── Mouse handlers ─────────────────────────────────────────────────────────
-  function _onMouseDown(e) {
-    const {x,y} = _screenToCanvas(e.offsetX, e.offsetY);
-    if (_tool === 'pan') {
-      _isPanning = true; _lastPanX = e.clientX; _lastPanY = e.clientY;
-      _canvas.style.cursor = 'grabbing'; return;
-    }
-    _drawing = true;
-    _applyStyle();
+  // ── Redraw virtual canvas to screen ────────────────────────────────────────
+  function _redraw() {
+    if (!_ctx || !_cv) return;
+    _ctx.clearRect(0, 0, _cv.width, _cv.height);
     _ctx.save();
-    _ctx.setTransform(_zoom, 0, 0, _zoom, _panX, _panY);
-    _ctx.beginPath(); _ctx.moveTo(x, y);
-    _broadcastStroke('start', x, y);
+    _ctx.translate(_vpx, _vpy);
+    _ctx.scale(_zoom, _zoom);
+    _ctx.drawImage(_vc, 0, 0);
+    _ctx.restore();
+    // Update zoom label
+    const lbl = document.getElementById('draw-zoom-lbl');
+    if (lbl) lbl.textContent = Math.round(_zoom*100) + '% · Pinch or scroll to zoom';
   }
 
-  function _onMouseMove(e) {
-    if (_isPanning) {
-      _panX += e.clientX - _lastPanX; _panY += e.clientY - _lastPanY;
-      _lastPanX = e.clientX; _lastPanY = e.clientY;
-      _redrawFromHistory(); _updateZoomIndicator(); return;
+  // ── Coordinate: screen → virtual canvas ────────────────────────────────────
+  function _s2v(sx, sy) {
+    return { x: (sx - _vpx) / _zoom, y: (sy - _vpy) / _zoom };
+  }
+
+  // ── Apply drawing style to virtual context ─────────────────────────────────
+  function _applyStyle(ctx) {
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    ctx.globalCompositeOperation = _tool === 'eraser' ? 'destination-out' : 'source-over';
+    ctx.globalAlpha  = _tool === 'marker' ? 0.4 : 1;
+    ctx.strokeStyle  = _color;
+    ctx.lineWidth    = _size;
+  }
+
+  // ── Mouse ──────────────────────────────────────────────────────────────────
+  function _md(e) {
+    if (_tool === 'pan') {
+      _panning = true; _panStartX = e.clientX; _panStartY = e.clientY;
+      _panVpx = _vpx; _panVpy = _vpy;
+      _cv.style.cursor = 'grabbing'; return;
+    }
+    const r  = _cv.getBoundingClientRect();
+    const pt = _s2v(e.clientX - r.left, e.clientY - r.top);
+    _drawing = true; _lastX = pt.x; _lastY = pt.y;
+    _applyStyle(_vctx);
+    _vctx.beginPath(); _vctx.moveTo(pt.x, pt.y);
+    _broadcastPt('start', pt.x, pt.y);
+  }
+  function _mm(e) {
+    const r = _cv.getBoundingClientRect();
+    if (_panning) {
+      _vpx = _panVpx + (e.clientX - _panStartX);
+      _vpy = _panVpy + (e.clientY - _panStartY);
+      _redraw(); return;
     }
     if (!_drawing) return;
-    const {x,y} = _screenToCanvas(e.offsetX, e.offsetY);
-    _ctx.lineTo(x, y); _ctx.stroke();
-    _scheduleSave();
-    _broadcastStroke('move', x, y);
+    const pt = _s2v(e.clientX - r.left, e.clientY - r.top);
+    _vctx.lineTo(pt.x, pt.y); _vctx.stroke();
+    _lastX = pt.x; _lastY = pt.y;
+    _redraw(); _schedSave();
+    _broadcastPt('move', pt.x, pt.y);
   }
-
-  function _onMouseUp() {
-    if (_isPanning) { _isPanning = false; _canvas.style.cursor = _tool==='pan'?'grab':'crosshair'; return; }
-    if (!_drawing) return;
-    _drawing = false;
-    _ctx.restore();
-    _saveHistoryEntry();
-    _broadcastStroke('end', 0, 0);
+  function _mu() {
+    if (_panning) { _panning = false; _cv.style.cursor = _tool==='pan'?'grab':'crosshair'; return; }
+    if (_drawing) { _drawing = false; _saveHistory(); _broadcastPt('end',0,0); }
   }
-
-  function _onWheel(e) {
+  function _mw(e) {
     e.preventDefault();
-    const rect = _canvas.getBoundingClientRect();
-    const mx = e.clientX - rect.left;
-    const my = e.clientY - rect.top;
-    const delta = e.deltaY > 0 ? 0.9 : 1.1;
-    _zoomAt(mx, my, delta);
+    const r   = _cv.getBoundingClientRect();
+    const mx  = e.clientX - r.left, my = e.clientY - r.top;
+    const fac = e.deltaY < 0 ? 1.12 : 0.89;
+    _zoomAt(mx, my, fac);
   }
 
-  // ── Touch handlers — pinch zoom ────────────────────────────────────────────
-  function _getTouchDist(t1, t2) {
-    return Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
-  }
-  function _getTouchMid(t1, t2, rect) {
-    return { x: (t1.clientX + t2.clientX)/2 - rect.left, y: (t1.clientY + t2.clientY)/2 - rect.top };
-  }
-
-  function _onTouchStart(e) {
+  // ── Touch ──────────────────────────────────────────────────────────────────
+  function _ts(e) {
     e.preventDefault();
-    if (e.touches.length === 2) {
-      _pinching = true; _drawing = false;
-      _lastPinchDist = _getTouchDist(e.touches[0], e.touches[1]);
+    Array.from(e.changedTouches).forEach(t => { _touches[t.identifier] = t; });
+    const ids = Object.keys(_touches);
+
+    if (ids.length === 2) {
+      // Pinch
+      _drawing = false;
+      const t1 = _touches[ids[0]], t2 = _touches[ids[1]];
+      _lastPinchDist = _dist(t1, t2);
+      _lastMidX = (t1.clientX + t2.clientX) / 2;
+      _lastMidY = (t1.clientY + t2.clientY) / 2;
       return;
     }
-    if (e.touches.length === 1) {
-      if (_tool === 'pan') {
-        _isPanning = true; _lastPanX = e.touches[0].clientX; _lastPanY = e.touches[0].clientY; return;
-      }
-      const rect = _canvas.getBoundingClientRect();
-      const {x,y} = _screenToCanvas(e.touches[0].clientX - rect.left, e.touches[0].clientY - rect.top);
-      _drawing = true;
-      _applyStyle();
-      _ctx.save();
-      _ctx.setTransform(_zoom, 0, 0, _zoom, _panX, _panY);
-      _ctx.beginPath(); _ctx.moveTo(x, y);
+    if (ids.length === 1 && _tool !== 'pan') {
+      const t = _touches[ids[0]];
+      const r = _cv.getBoundingClientRect();
+      const pt = _s2v(t.clientX - r.left, t.clientY - r.top);
+      _drawing = true; _lastX = pt.x; _lastY = pt.y;
+      _applyStyle(_vctx);
+      _vctx.beginPath(); _vctx.moveTo(pt.x, pt.y);
+      _broadcastPt('start', pt.x, pt.y);
+    }
+    if (ids.length === 1 && _tool === 'pan') {
+      _panning = true;
+      _panStartX = _touches[ids[0]].clientX; _panStartY = _touches[ids[0]].clientY;
+      _panVpx = _vpx; _panVpy = _vpy;
     }
   }
-
-  function _onTouchMove(e) {
+  function _tm(e) {
     e.preventDefault();
-    if (e.touches.length === 2 && _pinching) {
-      const dist = _getTouchDist(e.touches[0], e.touches[1]);
-      const rect = _canvas.getBoundingClientRect();
-      const mid  = _getTouchMid(e.touches[0], e.touches[1], rect);
+    Array.from(e.changedTouches).forEach(t => { _touches[t.identifier] = t; });
+    const ids = Object.keys(_touches);
+
+    if (ids.length === 2) {
+      const t1 = _touches[ids[0]], t2 = _touches[ids[1]];
+      const d   = _dist(t1, t2);
+      const mx  = (t1.clientX + t2.clientX) / 2;
+      const my  = (t1.clientY + t2.clientY) / 2;
+      const r   = _cv.getBoundingClientRect();
+      // Pinch zoom
       if (_lastPinchDist) {
-        const scale = dist / _lastPinchDist;
-        _zoomAt(mid.x, mid.y, scale);
+        const fac = d / _lastPinchDist;
+        _zoomAt(mx - r.left, my - r.top, fac);
+        // Also pan with mid point movement
+        _vpx += (mx - _lastMidX); _vpy += (my - _lastMidY);
+        _redraw();
       }
-      _lastPinchDist = dist; return;
+      _lastPinchDist = d; _lastMidX = mx; _lastMidY = my;
+      return;
     }
-    if (_isPanning && e.touches.length === 1) {
-      _panX += e.touches[0].clientX - _lastPanX; _panY += e.touches[0].clientY - _lastPanY;
-      _lastPanX = e.touches[0].clientX; _lastPanY = e.touches[0].clientY;
-      _redrawFromHistory(); _updateZoomIndicator(); return;
+    if (_panning && ids.length === 1) {
+      const t = _touches[ids[0]];
+      _vpx = _panVpx + (t.clientX - _panStartX);
+      _vpy = _panVpy + (t.clientY - _panStartY);
+      _redraw(); return;
     }
-    if (_drawing && e.touches.length === 1) {
-      const rect = _canvas.getBoundingClientRect();
-      const {x,y} = _screenToCanvas(e.touches[0].clientX - rect.left, e.touches[0].clientY - rect.top);
-      _ctx.lineTo(x, y); _ctx.stroke();
-      _scheduleSave();
+    if (_drawing && ids.length === 1) {
+      const t  = _touches[ids[0]];
+      const r  = _cv.getBoundingClientRect();
+      const pt = _s2v(t.clientX - r.left, t.clientY - r.top);
+      _vctx.lineTo(pt.x, pt.y); _vctx.stroke();
+      _lastX = pt.x; _lastY = pt.y;
+      _redraw(); _schedSave();
+      _broadcastPt('move', pt.x, pt.y);
+    }
+  }
+  function _te(e) {
+    e.preventDefault();
+    Array.from(e.changedTouches).forEach(t => { delete _touches[t.identifier]; });
+    const ids = Object.keys(_touches);
+    if (ids.length < 2) { _lastPinchDist = null; }
+    if (ids.length === 0) {
+      _panning = false;
+      if (_drawing) { _drawing = false; _saveHistory(); _broadcastPt('end',0,0); }
     }
   }
 
-  function _onTouchEnd(e) {
-    e.preventDefault();
-    if (e.touches.length < 2) { _pinching = false; _lastPinchDist = null; }
-    if (e.touches.length === 0) {
-      _isPanning = false;
-      if (_drawing) { _drawing = false; _ctx.restore(); _saveHistoryEntry(); }
-    }
-  }
+  function _dist(t1, t2) { return Math.hypot(t1.clientX-t2.clientX, t1.clientY-t2.clientY); }
 
   // ── Zoom ───────────────────────────────────────────────────────────────────
-  function _zoomAt(cx, cy, scale) {
-    const newZoom = Math.max(0.1, Math.min(8, _zoom * scale));
-    const factor  = newZoom / _zoom;
-    _panX = cx - factor * (cx - _panX);
-    _panY = cy - factor * (cy - _panY);
-    _zoom = newZoom;
-    _redrawFromHistory();
-    _updateZoomIndicator();
+  function _zoomAt(cx, cy, fac) {
+    const nz = Math.max(0.1, Math.min(8, _zoom * fac));
+    const f  = nz / _zoom;
+    _vpx = cx - f * (cx - _vpx);
+    _vpy = cy - f * (cy - _vpy);
+    _zoom = nz;
+    _redraw();
   }
-
   function _resetView() {
-    _zoom = 1; _panX = 0; _panY = 0;
-    _redrawFromHistory(); _updateZoomIndicator();
-  }
-
-  function _updateZoomIndicator() {
-    const el = document.getElementById('zoom-ind');
-    if (el) el.textContent = Math.round(_zoom * 100) + '%';
-  }
-
-  // ── Drawing style ──────────────────────────────────────────────────────────
-  function _applyStyle() {
-    if (!_ctx) return;
-    _ctx.lineCap = 'round'; _ctx.lineJoin = 'round';
-    _ctx.globalCompositeOperation = _tool === 'eraser' ? 'destination-out' : 'source-over';
-    _ctx.globalAlpha  = _tool === 'marker' ? 0.45 : 1;
-    _ctx.strokeStyle  = _tool === 'eraser' ? 'rgba(0,0,0,1)' : _color;
-    _ctx.lineWidth    = _size;
-  }
-
-  // ── History (undo/redo) ────────────────────────────────────────────────────
-  function _saveHistoryEntry() {
-    if (!_canvas || _canvas.width < 10) return;
-    _history = _history.slice(0, _histPos + 1);
-    _history.push({ img: _canvas.toDataURL(), zoom: _zoom, panX: _panX, panY: _panY });
-    if (_history.length > 30) _history.shift();
-    _histPos = _history.length - 1;
-  }
-
-  function _redrawFromHistory() {
-    if (_histPos < 0 || !_history[_histPos]) return;
-    const entry = _history[_histPos];
-    const img = new Image();
-    img.onload = () => {
-      _ctx.clearRect(0, 0, _canvas.width, _canvas.height);
-      _ctx.drawImage(img, 0, 0);
-    };
-    img.src = entry.img;
-  }
-
-  function _undo() {
-    if (_histPos < 1) return;
-    _histPos--;
-    const entry = _history[_histPos];
-    const img = new Image();
-    img.onload = () => { _ctx.clearRect(0,0,_canvas.width,_canvas.height); _ctx.drawImage(img,0,0); };
-    img.src = entry.img;
-    _scheduleSave();
-  }
-
-  function _redo() {
-    if (_histPos >= _history.length - 1) return;
-    _histPos++;
-    const entry = _history[_histPos];
-    const img = new Image();
-    img.onload = () => { _ctx.clearRect(0,0,_canvas.width,_canvas.height); _ctx.drawImage(img,0,0); };
-    img.src = entry.img;
-    _scheduleSave();
-  }
-
-  function _clear() {
-    _ctx.globalCompositeOperation = 'source-over';
-    _ctx.clearRect(0,0,_canvas.width,_canvas.height);
-    _saveHistoryEntry();
-    _scheduleSave();
-    _applyStyle();
-  }
-
-  function _save() {
-    const a = document.createElement('a');
-    a.href = _canvas.toDataURL('image/png');
-    a.download = 'drawing-duolector.png';
-    a.click();
+    _zoom = 1;
+    _vpx = -(_cnt ? VSIZE/2 - _cnt.clientWidth/2 : 0);
+    _vpy = -(_cnt ? VSIZE/2 - _cnt.clientHeight/2 : 0);
+    _redraw();
   }
 
   // ── Controls ───────────────────────────────────────────────────────────────
-  function _setColor(c, btn) {
-    _color = c;
-    if (_tool === 'eraser') _setTool('pen');
-    document.querySelectorAll('.draw-color-btn').forEach(b => b.classList.remove('active'));
-    if (btn) btn.classList.add('active');
-    const dot = document.getElementById('dsd');
-    if (dot) dot.style.background = c;
-    _applyStyle();
-  }
-
-  function _setSize(v) {
-    _size = v;
-    const dot = document.getElementById('dsd');
-    const s = Math.max(4, Math.min(v, 30));
-    if (dot) { dot.style.width = s+'px'; dot.style.height = s+'px'; }
-    _applyStyle();
-  }
-
-  function _setTool(t) {
+  function _pickTool(t) {
     _tool = t;
-    ['pen','marker','eraser','pan'].forEach(name => {
-      const el = document.getElementById('dt-' + name);
-      if (el) el.classList.toggle('active', name === t);
+    ['pen','marker','eraser','pan'].forEach(n => {
+      const b = document.getElementById('tb-' + n);
+      if (!b) return;
+      b.style.background = n===t ? 'var(--amber)' : 'var(--surface2)';
+      b.style.color      = n===t ? '#000' : 'var(--text2)';
     });
-    const cnt = document.getElementById('draw-cnt');
-    if (cnt) cnt.style.cursor = t === 'pan' ? 'grab' : 'crosshair';
-    _applyStyle();
+    if (_cnt) _cnt.style.cursor = t==='pan' ? 'grab' : 'crosshair';
+  }
+  function _pickColor(c, el) {
+    _color = c;
+    document.querySelectorAll('.draw-color-btn').forEach(b => { b.style.border = '2px solid transparent'; });
+    if (el) el.style.border = '2px solid var(--text)';
+    const dot = document.getElementById('sz-dot');
+    if (dot) dot.style.background = c;
+    if (_tool === 'eraser') _pickTool('pen');
+  }
+  function _pickSize(v) {
+    _size = v;
+    const dot = document.getElementById('sz-dot');
+    const s   = Math.min(v, 18);
+    if (dot) { dot.style.width = s+'px'; dot.style.height = s+'px'; }
+  }
+
+  // ── History ────────────────────────────────────────────────────────────────
+  let _hist = [], _hp = -1;
+  function _saveHistory() {
+    _hist = _hist.slice(0, _hp+1);
+    _hist.push(_vc.toDataURL());
+    if (_hist.length > 25) _hist.shift();
+    _hp = _hist.length - 1;
+  }
+  function _restoreHistory(idx) {
+    if (idx < 0 || idx >= _hist.length) return;
+    const img = new Image();
+    img.onload = () => { _vctx.clearRect(0,0,VSIZE,VSIZE); _vctx.drawImage(img,0,0); _redraw(); };
+    img.src = _hist[idx];
+  }
+  function _undo() { if (_hp>0) { _hp--; _restoreHistory(_hp); _schedSave(); } }
+  function _redo() { if (_hp<_hist.length-1) { _hp++; _restoreHistory(_hp); _schedSave(); } }
+  function _clear() {
+    _vctx.clearRect(0,0,VSIZE,VSIZE);
+    _saveHistory(); _redraw(); _schedSave();
+  }
+  function _savePng() {
+    const a = document.createElement('a');
+    a.href = _vc.toDataURL('image/png');
+    a.download = 'duolector-drawing.png';
+    a.click();
   }
 
   // ── Persist ────────────────────────────────────────────────────────────────
-  function _scheduleSave() {
-    clearTimeout(_saveTimeout);
-    _saveTimeout = setTimeout(_autoSave, 2000);
-  }
-
+  function _schedSave() { clearTimeout(_saveTimer); _saveTimer = setTimeout(_autoSave, 2000); }
   async function _autoSave() {
-    const coupleId = AppAuth.currentCoupleId();
-    if (!coupleId || !_canvas || _canvas.width < 10) return;
-    try { await DB.setSetting(coupleId, 'drawing', _canvas.toDataURL('image/jpeg', 0.7)); } catch {}
+    const coupleId = AppAuth.currentCoupleId(); if (!coupleId) return;
+    try { await DB.setSetting(coupleId, 'drawing', _vc.toDataURL('image/jpeg', 0.65)); } catch {}
+    if (typeof KM !== 'undefined') KM.addDrawing && KM.addDrawing();
   }
-
   async function _loadSaved() {
-    const coupleId = AppAuth.currentCoupleId();
-    if (!coupleId) return;
+    const coupleId = AppAuth.currentCoupleId(); if (!coupleId) return;
     try {
-      const data = await DB.getSetting(coupleId, 'drawing');
-      if (data?.startsWith('data:')) {
-        const img = new Image();
-        img.onload = () => { _ctx.drawImage(img,0,0); _saveHistoryEntry(); };
-        img.src = data;
-      }
-    } catch {}
+      const d = await DB.getSetting(coupleId, 'drawing');
+      if (!d || !d.startsWith('data:')) { _saveHistory(); return; }
+      const img = new Image();
+      img.onload = () => { _vctx.clearRect(0,0,VSIZE,VSIZE); _vctx.drawImage(img,0,0); _saveHistory(); _redraw(); };
+      img.src = d;
+    } catch { _saveHistory(); }
   }
 
-  // ── Realtime ───────────────────────────────────────────────────────────────
-  function _broadcastStroke(type, x, y) {
+  // ── Realtime collaboration ─────────────────────────────────────────────────
+  function _broadcastPt(type, x, y) {
     if (!_channel) return;
     try {
-      _channel.send({ type:'broadcast', event:'stroke', payload:{
+      _channel.send({type:'broadcast', event:'draw', payload:{
         type, x, y, tool:_tool, color:_color, size:_size,
-        zoom:_zoom, panX:_panX, panY:_panY,
         by: State.get('profile')?.id
       }});
     } catch {}
   }
-
   function _initRealtime() {
-    const coupleId = AppAuth.currentCoupleId();
-    if (!coupleId) return;
+    const coupleId = AppAuth.currentCoupleId(); if (!coupleId) return;
     try {
       _channel = DB.client().channel('draw-' + coupleId);
-      _channel.on('broadcast', { event:'stroke' }, ({ payload }) => {
-        if (!payload || payload.by === State.get('profile')?.id) return;
-        _applyRemoteStroke(payload);
-        const ps = document.getElementById('draw-partner-status');
+      _channel.on('broadcast', {event:'draw'}, ({payload:p}) => {
+        if (!p || p.by === State.get('profile')?.id) return;
+        const prev = { op:_vctx.globalCompositeOperation, alpha:_vctx.globalAlpha, color:_vctx.strokeStyle, w:_vctx.lineWidth };
+        _vctx.lineCap = 'round'; _vctx.lineJoin = 'round';
+        _vctx.globalCompositeOperation = p.tool==='eraser' ? 'destination-out' : 'source-over';
+        _vctx.globalAlpha = p.tool==='marker' ? 0.4 : 1;
+        _vctx.strokeStyle = p.color; _vctx.lineWidth = p.size;
+        if (p.type==='start') { _vctx.beginPath(); _vctx.moveTo(p.x, p.y); }
+        else if (p.type==='move') { _vctx.lineTo(p.x, p.y); _vctx.stroke(); _redraw(); }
+        else if (p.type==='end') { _schedSave(); }
+        _vctx.globalCompositeOperation = prev.op; _vctx.globalAlpha = prev.alpha;
+        _vctx.strokeStyle = prev.color; _vctx.lineWidth = prev.w;
+        // Show partner drawing indicator
         const partner = State.get('partner');
-        if (ps && partner) {
-          ps.textContent = (partner.emoji||'✏️') + ' ' + partner.display_name + ' is drawing...';
-          clearTimeout(ps._t); ps._t = setTimeout(() => { ps.textContent=''; }, 2500);
+        const el = document.getElementById('draw-partner-info');
+        if (el && partner) {
+          el.textContent = (partner.emoji||'✏️') + ' ' + partner.display_name + ' is drawing…';
+          clearTimeout(el._t); el._t = setTimeout(()=>{ el.textContent=''; }, 2000);
         }
       });
       _channel.subscribe();
     } catch {}
   }
 
-  function _applyRemoteStroke(p) {
-    if (!_ctx) return;
-    const saved = { op:_ctx.globalCompositeOperation, alpha:_ctx.globalAlpha, color:_ctx.strokeStyle, width:_ctx.lineWidth };
-    _ctx.globalCompositeOperation = p.tool==='eraser' ? 'destination-out' : 'source-over';
-    _ctx.globalAlpha  = p.tool==='marker' ? 0.45 : 1;
-    _ctx.strokeStyle  = p.color; _ctx.lineWidth = p.size;
-    _ctx.save();
-    _ctx.setTransform(p.zoom||1, 0, 0, p.zoom||1, p.panX||0, p.panY||0);
-    if (p.type==='start') { _ctx.beginPath(); _ctx.moveTo(p.x,p.y); }
-    else if (p.type==='move') { _ctx.lineTo(p.x,p.y); _ctx.stroke(); }
-    else if (p.type==='end') { _ctx.restore(); _scheduleSave(); }
-    _ctx.globalCompositeOperation = saved.op; _ctx.globalAlpha = saved.alpha;
-    _ctx.strokeStyle = saved.color; _ctx.lineWidth = saved.width;
-  }
-
-  return { init, _setColor, _setSize, _setTool, _undo, _redo, _clear, _save, _resetView };
+  return { init, _pickTool, _pickColor, _pickSize, _undo, _redo, _clear, _savePng, _resetView };
 })();
 
 
@@ -5692,7 +5937,19 @@ function initStars() {
       vx:6+Math.random()*4,vy:3+Math.random()*2,len:80+Math.random()*60,life:1};
   }
   function draw() {
-    if(document.body.getAttribute('data-theme')==='light'){ctx.clearRect(0,0,canvas.width,canvas.height);requestAnimationFrame(draw);return;}
+    const isLightMode = document.body.getAttribute('data-theme')==='light';
+    if(isLightMode){
+      // Light mode: snow particles in global canvas too
+      ctx.clearRect(0,0,canvas.width,canvas.height);
+      const tSnow=Date.now()/1000;
+      stars.forEach(s=>{
+        s.y+=s.sp*35; s.x+=Math.sin(tSnow*s.sp*3+s.ph)*0.4;
+        if(s.y>canvas.height+10){s.y=-10;s.x=Math.random()*canvas.width;}
+        ctx.globalAlpha=s.o*0.5; ctx.fillStyle='#c8dcf0';
+        ctx.font=(s.r*7+4)+'px serif'; ctx.fillText('❄',s.x,s.y);
+      });
+      ctx.globalAlpha=1; requestAnimationFrame(draw); return;
+    }
     ctx.clearRect(0,0,canvas.width,canvas.height);
     const t=Date.now()/1000;
     stars.forEach(s=>{
@@ -5717,7 +5974,7 @@ function initStars() {
     ctx.globalAlpha=1; requestAnimationFrame(draw);
   }
   window.addEventListener('resize',resize); resize(); draw();
-  setInterval(spawnShooting,6000+Math.random()*4000); setTimeout(spawnShooting,3000);
+  setInterval(spawnShooting,4000+Math.random()*3000); setTimeout(spawnShooting,1500); setTimeout(spawnShooting,8000);
 }
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
