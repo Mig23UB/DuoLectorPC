@@ -1205,6 +1205,9 @@ a{text-decoration:none;color:inherit;cursor:pointer}
       <div class="auth-tab" data-tab="register" onclick="AuthScreen.setTab('register')">Sign Up</div>
     </div>
     <div id="auth-form-area"></div>
+    <div style="text-align:center;margin-bottom:8px">
+      <button onclick="(function(){var keys=[];for(var i=0;i<localStorage.length;i++){var k=localStorage.key(i);if(k&&(k.startsWith('dl_')||k.startsWith('sb-')||k.includes('supabase')))keys.push(k);}keys.forEach(function(k){localStorage.removeItem(k);});location.reload();})()" style="background:none;border:none;color:var(--dim);font-size:.6rem;cursor:pointer;text-decoration:underline">Having trouble signing in? Clear cache</button>
+    </div>
     <div class="auth-footer">Made with love · DuoLector 🧡</div>
   </div>
 </div>
@@ -1669,6 +1672,12 @@ const AppAuth = (() => {
       if (event === 'SIGNED_IN' && session?.user) {
         await _loadUserContext(session.user);
       } else if (event === 'SIGNED_OUT') {
+        _clearAllStorage();
+        State.clear();
+        App.showAuth();
+      } else if (event === 'TOKEN_REFRESHED' && !session) {
+        // Token refresh failed — clear everything and show auth
+        _clearAllStorage();
         State.clear();
         App.showAuth();
       }
@@ -1677,7 +1686,7 @@ const AppAuth = (() => {
     try {
       const session = await Promise.race([
         DB.Auth.getSession(),
-        new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 8000))
+        new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 6000))
       ]);
       if (session?.user) {
         await _loadUserContext(session.user);
@@ -1685,9 +1694,26 @@ const AppAuth = (() => {
       }
     } catch (e) {
       console.warn('Auth init:', e.message);
+      // If timeout or error, clear stale tokens so next login works
+      if (e.message === 'timeout' || e.message?.includes('refresh')) {
+        _clearAllStorage();
+      }
     }
     App.showAuth();
     return false;
+  }
+
+  function _clearAllStorage() {
+    try {
+      const keys = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && (k.startsWith('dl_') || k.startsWith('sb-') || k.includes('supabase'))) {
+          keys.push(k);
+        }
+      }
+      keys.forEach(k => localStorage.removeItem(k));
+    } catch {}
   }
 
   async function _loadUserContext(user) {
@@ -1805,17 +1831,7 @@ const AppAuth = (() => {
 
   async function signOut() {
     try { await DB.Auth.signOut(); } catch {}
-    // Clear ALL local state — critical to avoid stale auth tokens
-    try {
-      const keys = [];
-      for (let i = 0; i < localStorage.length; i++) {
-        const k = localStorage.key(i);
-        if (k && (k.startsWith('dl_') || k.startsWith('sb-') || k.includes('supabase'))) {
-          keys.push(k);
-        }
-      }
-      keys.forEach(k => localStorage.removeItem(k));
-    } catch {}
+    _clearAllStorage();
     State.clear();
     App.showAuth();
   }
