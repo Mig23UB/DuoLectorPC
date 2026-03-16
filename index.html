@@ -1664,212 +1664,145 @@ const LocalCache = (() => {
 })();
 
 
-// ── AppAuth ───────────────────────────────────────────────────────────────────
+// ── AppAuth — minimal, no race conditions ─────────────────────────────────────
 const AppAuth = (() => {
-
-  let _loading = false; // prevent double _loadUserContext
-
-  // ── Public: called once on app start ──────────────────────────────────────
-  async function init() {
-    // Listen for auth changes (token refresh, sign out from another tab)
-    DB.Auth.onAuthChange(async (event, session) => {
-      if (_loading) return; // already handling login, ignore
-      if (event === 'SIGNED_OUT') {
-        _clearStorage();
-        State.clear();
-        App.showAuth();
-      }
-      // Do NOT handle SIGNED_IN here — login() handles it directly
-    });
-
-    // Check if there's already a session
-    try {
-      const session = await Promise.race([
-        DB.Auth.getSession(),
-        new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 7000))
-      ]);
-      if (session?.user) {
-        await _loadUserContext(session.user);
-        return;
-      }
-    } catch (e) {
-      console.warn('Auth init error:', e.message);
-      if (e.message === 'timeout') _clearStorage();
-    }
-
-    App.showAuth();
-  }
-
-  // ── Login — called from auth form ─────────────────────────────────────────
-  async function login(email, password) {
-    if (_loading) return;
-    _loading = true;
-    try {
-      const data = await DB.Auth.signIn(email, password);
-      if (data?.user) {
-        await _loadUserContext(data.user);
-      }
-    } finally {
-      _loading = false;
-    }
-  }
-
-  // ── Register — called from auth form ──────────────────────────────────────
-  async function register(email, password, displayName, lang) {
-    if (_loading) return;
-    _loading = true;
-    try {
-      await DB.Auth.signUp(email, password, displayName, lang || 'en');
-      // After signup, sign in immediately
-      const data = await DB.Auth.signIn(email, password);
-      if (data?.user) {
-        await _loadUserContext(data.user);
-      }
-    } finally {
-      _loading = false;
-    }
-  }
-
-  // ── Load user data after auth ─────────────────────────────────────────────
-  async function _loadUserContext(user) {
-    State.set('user', user);
-
-    // Load profile
-    try {
-      const rows = await DB.get('profiles', { eqOne: ['id', user.id] });
-      if (rows[0]) {
-        State.set('profile', rows[0]);
-      } else {
-        State.set('profile', { id: user.id, display_name: user.email?.split('@')[0] || 'User', emoji: '😊', lang: 'en' });
-      }
-    } catch {
-      State.set('profile', { id: user.id, display_name: user.email?.split('@')[0] || 'User', emoji: '😊', lang: 'en' });
-    }
-
-    // Load couple membership
-    try {
-      const memberships = await DB.get('couple_members', { eqOne: ['user_id', user.id] });
-
-      if (memberships.length > 0) {
-        const coupleId = memberships[0].couple_id;
-
-        const [couples, allMembers] = await Promise.all([
-          DB.get('couples', { eqOne: ['id', coupleId] }),
-          DB.get('couple_members', { eqOne: ['couple_id', coupleId] }),
-        ]);
-
-        const couple  = couples[0] || null;
-        const partner = allMembers.find(m => m.user_id !== user.id) || null;
-
-        State.set('couple',  couple);
-        State.set('members', allMembers);
-        State.set('partner', partner);
-
-        // Cache for fast load next time
-        _saveCache(couple, partner);
-        App.showApp();
-      } else {
-        App.showCoupleSetup();
-      }
-    } catch (e) {
-      console.error('loadUserContext error:', e);
-      App.showCoupleSetup();
-    }
-  }
-
-  // ── Couple creation ───────────────────────────────────────────────────────
-  async function createCouple(name, displayName, emoji, timezone, city) {
-    const user = State.get('user');
-    if (!user) throw new Error('No active session');
-
-    const existing = await DB.get('couple_members', { eqOne: ['user_id', user.id] });
-    if (existing.length > 0) throw new Error('You already have a space');
-
-    const couple = await DB.insert('couples', { name: name || (displayName + "'s space") });
-
-    await DB.insert('couple_members', {
-      couple_id: couple.id, user_id: user.id,
-      display_name: displayName, emoji: emoji,
-      timezone: timezone || 'America/Montevideo',
-      city: city || ''
-    });
-
-    await DB.upsert('profiles', {
-      id: user.id, display_name: displayName, emoji: emoji,
-      lang: State.get('profile')?.lang || 'en',
-      timezone: timezone || 'America/Montevideo', city: city || ''
-    }, { onConflict: 'id' });
-
-    await _loadUserContext(user);
-  }
-
-  // ── Join couple ───────────────────────────────────────────────────────────
-  async function joinCouple(inviteCode, displayName, emoji, timezone, city) {
-    const user = State.get('user');
-    if (!user) throw new Error('No active session');
-
-    const { data, error } = await DB.client()
-      .from('couples').select('*')
-      .eq('invite_code', inviteCode.toLowerCase().trim())
-      .single();
-
-    if (error || !data) throw new Error('Invalid invite code');
-
-    const members = await DB.get('couple_members', { eqOne: ['couple_id', data.id] });
-    if (members.find(m => m.user_id === user.id)) throw new Error('Already a member');
-    if (members.length >= 2) throw new Error('This couple is full');
-
-    await DB.insert('couple_members', {
-      couple_id: data.id, user_id: user.id,
-      display_name: displayName, emoji: emoji,
-      timezone: timezone || 'America/Montevideo', city: city || ''
-    });
-
-    await DB.upsert('profiles', {
-      id: user.id, display_name: displayName, emoji: emoji,
-      lang: State.get('profile')?.lang || 'en',
-      timezone: timezone || 'America/Montevideo', city: city || ''
-    }, { onConflict: 'id' });
-
-    await _loadUserContext(user);
-  }
-
-  // ── Sign out ──────────────────────────────────────────────────────────────
-  async function signOut() {
-    try { await DB.Auth.signOut(); } catch {}
-    _clearStorage();
-    State.clear();
-    App.showAuth();
-  }
-
-  // ── Storage helpers ───────────────────────────────────────────────────────
-  function _saveCache(couple, partner) {
-    try {
-      if (couple) localStorage.setItem('dl_couple', JSON.stringify({ ...couple, _ts: Date.now() }));
-      if (partner) localStorage.setItem('dl_partner', JSON.stringify(partner));
-      const profile = State.get('profile');
-      if (profile) localStorage.setItem('dl_profile', JSON.stringify(profile));
-    } catch {}
-  }
-
-  function _clearStorage() {
-    try {
-      const keys = [];
-      for (let i = 0; i < localStorage.length; i++) {
-        const k = localStorage.key(i);
-        if (k && (k.startsWith('dl_') || k.startsWith('sb-') || k.includes('supabase'))) {
-          keys.push(k);
-        }
-      }
-      keys.forEach(k => localStorage.removeItem(k));
-    } catch {}
-  }
 
   function currentCoupleId() {
     return State.get('couple')?.id || null;
   }
 
-  return { init, login, register, createCouple, joinCouple, signOut, currentCoupleId };
+  // Called once on startup — check for existing session
+  async function init() {
+    try {
+      const { data } = await DB.client().auth.getSession();
+      if (data?.session?.user) {
+        await _load(data.session.user);
+        return;
+      }
+    } catch(e) {
+      console.warn('init error:', e.message);
+      _nukeStorage();
+    }
+    App.showAuth();
+  }
+
+  // Called by login button — handles everything end to end
+  async function login(email, password) {
+    const { data, error } = await DB.client().auth.signInWithPassword({ email, password });
+    if (error) throw error;
+    await _load(data.user);
+  }
+
+  // Called by register button
+  async function register(email, password, name, lang) {
+    // Sign up
+    const { error: signUpError } = await DB.client().auth.signUp({
+      email, password,
+      options: { data: { full_name: name, lang: lang || 'en' } }
+    });
+    if (signUpError) throw signUpError;
+    // Sign in immediately (works because email confirm is OFF)
+    const { data, error: signInError } = await DB.client().auth.signInWithPassword({ email, password });
+    if (signInError) throw signInError;
+    await _load(data.user);
+  }
+
+  async function signOut() {
+    try { await DB.client().auth.signOut(); } catch {}
+    _nukeStorage();
+    State.clear();
+    App.showAuth();
+  }
+
+  async function createCouple(name, displayName, emoji, timezone, city) {
+    const user = State.get('user');
+    if (!user) throw new Error('Not logged in');
+    const couple = await DB.insert('couples', { name: name || displayName + "'s space" });
+    await DB.insert('couple_members', {
+      couple_id: couple.id, user_id: user.id,
+      display_name: displayName, emoji,
+      timezone: timezone || 'America/Montevideo', city: city || ''
+    });
+    await DB.upsert('profiles', {
+      id: user.id, display_name: displayName, emoji,
+      lang: State.get('profile')?.lang || 'en',
+      timezone: timezone || 'America/Montevideo', city: city || ''
+    }, { onConflict: 'id' });
+    await _load(user);
+  }
+
+  async function joinCouple(code, displayName, emoji, timezone, city) {
+    const user = State.get('user');
+    if (!user) throw new Error('Not logged in');
+    const { data, error } = await DB.client().from('couples').select('*').eq('invite_code', code.trim().toLowerCase()).single();
+    if (error || !data) throw new Error('Invalid invite code');
+    const members = await DB.get('couple_members', { eqOne: ['couple_id', data.id] });
+    if (members.length >= 2) throw new Error('This couple is full');
+    await DB.insert('couple_members', {
+      couple_id: data.id, user_id: user.id,
+      display_name: displayName, emoji,
+      timezone: timezone || 'America/Montevideo', city: city || ''
+    });
+    await DB.upsert('profiles', {
+      id: user.id, display_name: displayName, emoji,
+      lang: State.get('profile')?.lang || 'en',
+      timezone: timezone || 'America/Montevideo', city: city || ''
+    }, { onConflict: 'id' });
+    await _load(user);
+  }
+
+  // ── Internal ───────────────────────────────────────────────────────────────
+  async function _load(user) {
+    State.set('user', user);
+
+    // Profile
+    try {
+      const rows = await DB.get('profiles', { eqOne: ['id', user.id] });
+      State.set('profile', rows[0] || { id: user.id, display_name: user.email.split('@')[0], emoji: '😊', lang: 'en' });
+    } catch {
+      State.set('profile', { id: user.id, display_name: user.email.split('@')[0], emoji: '😊', lang: 'en' });
+    }
+
+    // Couple
+    try {
+      const memberships = await DB.get('couple_members', { eqOne: ['user_id', user.id] });
+      if (!memberships.length) { App.showCoupleSetup(); return; }
+
+      const coupleId = memberships[0].couple_id;
+      const [couples, allMembers] = await Promise.all([
+        DB.get('couples', { eqOne: ['id', coupleId] }),
+        DB.get('couple_members', { eqOne: ['couple_id', coupleId] }),
+      ]);
+
+      State.set('couple',  couples[0] || null);
+      State.set('members', allMembers);
+      State.set('partner', allMembers.find(m => m.user_id !== user.id) || null);
+
+      try {
+        localStorage.setItem('dl_couple',  JSON.stringify({ ...(couples[0]||{}), _ts: Date.now() }));
+        localStorage.setItem('dl_partner', JSON.stringify(State.get('partner')));
+        localStorage.setItem('dl_profile', JSON.stringify(State.get('profile')));
+      } catch {}
+
+      App.showApp();
+    } catch(e) {
+      console.error('_load couple error:', e);
+      App.showCoupleSetup();
+    }
+  }
+
+  function _nukeStorage() {
+    try {
+      const del = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && (k.startsWith('dl_') || k.startsWith('sb-') || k.includes('supabase'))) del.push(k);
+      }
+      del.forEach(k => localStorage.removeItem(k));
+    } catch {}
+  }
+
+  return { init, login, register, signOut, createCouple, joinCouple, currentCoupleId };
 })();
 
 
@@ -5552,15 +5485,14 @@ const AuthScreen = {
     this._setLoading(true, 'Sign In');
     try {
       await AppAuth.login(email, pass);
-      // AppAuth.login handles navigation — if we get here without redirect, show error
     } catch(e) {
-      const msg = e.message || '';
-      if (msg.includes('Invalid login') || msg.includes('invalid_credentials') || msg.includes('credentials')) {
+      const msg = (e.message || '').toLowerCase();
+      if (msg.includes('invalid') || msg.includes('credentials') || msg.includes('password')) {
         this._err('Wrong email or password');
-      } else if (msg.includes('Email not confirmed')) {
-        this._err('Please confirm your email first, or contact support');
+      } else if (msg.includes('confirmed')) {
+        this._err('Email not confirmed — contact support');
       } else {
-        this._err(msg || 'Login error');
+        this._err(e.message || 'Login failed');
       }
       this._setLoading(false, 'Sign In');
     }
@@ -5578,7 +5510,6 @@ const AuthScreen = {
     this._setLoading(true, 'Create account');
     try {
       await AppAuth.register(email, pass, name, lang);
-      // AppAuth.register signs up + signs in + loads context — handles navigation
     } catch(e) {
       this._err(e.message || 'Registration error');
       this._setLoading(false, 'Create account');
