@@ -1,15 +1,13 @@
+# DuoLector — robots.txt
+# https://duolector.com
+
 User-agent: *
 Allow: /
 
-# Sitemaps
+# Don't crawl OAuth callback hash fragments or internal app states
+Disallow: /#access_token
+Disallow: /#refresh_token
+Disallow: /auth/callback
+
+# Sitemap
 Sitemap: https://duolector.com/sitemap.xml
-
-# Allow all major search engines
-User-agent: Googlebot
-Allow: /
-
-User-agent: Yandex
-Allow: /
-
-User-agent: Bingbot
-Allow: /
