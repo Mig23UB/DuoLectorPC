@@ -1,7 +1,7 @@
-// DuoLector Service Worker v1.0
-const CACHE_NAME = 'duolector-v1';
+// DuoLector Service Worker v2.0
+const CACHE_NAME = 'duolector-v2';
+const VAPID_PUBLIC_KEY = 'BHlAznUOFa3h_pdtfhqcnHPnEB1LJArGFS9JtXQ-JxeLMnTD2UV6cmfL23O9Pe0jXpNhptmENOXxhughsDlafAg';
 
-// Archivos a cachear para uso offline
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -12,10 +12,7 @@ const STATIC_ASSETS = [
 self.addEventListener('install', event => {
   event.waitUntil(
     caches.open(CACHE_NAME).then(cache => {
-      return cache.addAll(STATIC_ASSETS).catch(() => {
-        // Si falla algún asset externo, no bloqueamos la instalación
-        return cache.add('/index.html');
-      });
+      return cache.addAll(STATIC_ASSETS).catch(() => cache.add('/index.html'));
     })
   );
   self.skipWaiting();
@@ -25,11 +22,7 @@ self.addEventListener('install', event => {
 self.addEventListener('activate', event => {
   event.waitUntil(
     caches.keys().then(keys =>
-      Promise.all(
-        keys
-          .filter(key => key !== CACHE_NAME)
-          .map(key => caches.delete(key))
-      )
+      Promise.all(keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k)))
     )
   );
   self.clients.claim();
@@ -38,37 +31,28 @@ self.addEventListener('activate', event => {
 // ── FETCH — Network first, cache fallback ──
 self.addEventListener('fetch', event => {
   const url = new URL(event.request.url);
-
-  // No interceptar requests de Supabase — siempre necesitan red
   if (
     url.hostname.includes('supabase.co') ||
     url.hostname.includes('supabase.in') ||
     url.hostname.includes('googleapis.com') ||
     url.hostname.includes('googletagmanager.com') ||
-    url.hostname.includes('paypal.com')
-  ) {
-    return;
-  }
+    url.hostname.includes('ko-fi.com') ||
+    url.hostname.includes('storage.ko-fi.com')
+  ) return;
 
-  // Para el HTML principal: network first, fallback a cache
   if (event.request.mode === 'navigate') {
     event.respondWith(
       fetch(event.request)
         .then(response => {
-          // Guardar copia en cache
           const copy = response.clone();
           caches.open(CACHE_NAME).then(cache => cache.put(event.request, copy));
           return response;
         })
-        .catch(() => {
-          // Sin red: servir desde cache
-          return caches.match('/index.html');
-        })
+        .catch(() => caches.match('/index.html'))
     );
     return;
   }
 
-  // Para assets estáticos: cache first, network fallback
   event.respondWith(
     caches.match(event.request).then(cached => {
       if (cached) return cached;
@@ -82,10 +66,9 @@ self.addEventListener('fetch', event => {
   );
 });
 
-// ── PUSH NOTIFICATIONS (preparado para el futuro) ──
+// ── PUSH NOTIFICATIONS ──
 self.addEventListener('push', event => {
   if (!event.data) return;
-
   let data = {};
   try { data = event.data.json(); } catch { data = { title: 'DuoLector', body: event.data.text() }; }
 
@@ -96,7 +79,7 @@ self.addEventListener('push', event => {
     vibrate: [100, 50, 100],
     data: { url: data.url || '/' },
     actions: [
-      { action: 'open', title: 'Abrir', icon: '/icon-192.png' },
+      { action: 'open', title: 'Abrir' },
       { action: 'close', title: 'Cerrar' }
     ]
   };
@@ -109,7 +92,6 @@ self.addEventListener('push', event => {
 self.addEventListener('notificationclick', event => {
   event.notification.close();
   if (event.action === 'close') return;
-
   const url = event.notification.data?.url || '/';
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then(clientList => {
@@ -123,4 +105,11 @@ self.addEventListener('notificationclick', event => {
       if (clients.openWindow) return clients.openWindow(url);
     })
   );
+});
+
+// ── PUSH SUBSCRIPTION HELPER — exposed via postMessage ──
+self.addEventListener('message', event => {
+  if (event.data?.type === 'GET_VAPID_KEY') {
+    event.source?.postMessage({ type: 'VAPID_KEY', key: VAPID_PUBLIC_KEY });
+  }
 });
