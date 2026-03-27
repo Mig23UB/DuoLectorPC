@@ -1,0 +1,55 @@
+# DuoLector
+
+> DuoLector is a free web app for long-distance couples. No download required — works on any device in any browser.
+
+## What is DuoLector?
+
+DuoLector is a private digital space built specifically for couples separated by distance. It combines reading, communication, and creativity tools in a single app that works without VPN even in Russia.
+
+## Core Features
+
+- **Synchronized PDF Reader**: Both partners read the same book together in real time. Page changes are synced via Supabase Realtime. A floating bubble shows the partner's current page and reading status.
+- **Private Chat**: Real-time messaging with photo sharing, inline translator (MyMemory API), and AI-powered translation assistant.
+- **Shared Diary**: Both partners write entries. Long-press to react with emoji. Photos supported.
+- **Sealed Letters**: Write letters that only unlock on a specific date, manually when you meet, or with a password. Sender can see when the letter was opened.
+- **Collaborative Drawing**: Shared canvas where both partners draw in real time.
+- **Music Together**: Shared playlist with synchronized listening.
+- **Dual Clocks**: Shows local time and partner's timezone automatically detected.
+- **Challenges & Gamification**: Reading challenges, streaks, and km-based XP system.
+- **PWA**: Installable as a native app on iOS and Android without any app store.
+
+## Technical Details
+
+- **Hosting**: GitHub Pages (single index.html)
+- **Backend**: Supabase (PostgreSQL + Realtime + Storage + Auth + Edge Functions)
+- **Auth**: Email/password and Google OAuth
+- **Works in Russia**: Servers in São Paulo, not blocked
+- **Languages**: Spanish, English, Russian, Portuguese, French, German
+
+## URLs
+
+- App: https://duolector.com
+- Support: matiass161@gmail.com
+
+## Who is it for?
+
+Long-distance couples (LDR) who want a shared private space. Especially useful for couples where one partner is in Russia and the other abroad, since the app works without VPN.
+
+## Privacy
+
+- All data is private to the couple
+- No ads
+- No data sold to third parties
+- Each couple has an isolated data space
+
+## How to get started
+
+1. Go to duolector.com
+2. Create an account (email or Google)
+3. Copy your invite code from Settings
+4. Send it to your partner
+5. They join with the code — you're connected
+
+## Pricing
+
+Free. Donations accepted via Ko-fi: https://ko-fi.com/T6T71WJ3XF
