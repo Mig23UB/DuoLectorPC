@@ -1,0 +1,141 @@
+# 📖 DuoLector
+
+**Free private app for long-distance couples.** Read books together, chat, draw, keep a shared diary, and send sealed letters — all in real time.
+
+🌐 **[duolector.com](https://duolector.com)** · Works in Russia without VPN
+
+---
+
+## ✨ Features
+
+| Feature | Description |
+|---|---|
+| 📚 **Synchronized Reader** | Both read the same PDF in real time. Page changes sync instantly. A floating bubble shows your partner's current page. |
+| 💬 **Private Chat** | Real-time messaging with photo sharing and built-in translator (MyMemory API). |
+| 📔 **Shared Diary** | Private entries only you two can see. React with emoji (long-press). Add photos. |
+| 💌 **Sealed Letters** | Write letters that unlock on a specific date, when you meet, or with a password. See when your partner reads it. |
+| 🎨 **Draw Together** | Shared canvas with real-time sync. Both draw at the same time. |
+| 🎵 **Music Together** | Shared playlist with synchronized listening. |
+| 🌐 **Translator** | Built into chat — select source and target language, translate in one tap. |
+| ⏰ **Dual Clocks** | Shows your time and your partner's time zone (auto-detected). |
+| 🔥 **Challenges** | Reading streaks, shared goals, and a km-based XP system. |
+| 🔔 **Push Notifications** | Real-time alerts when your partner sends a message or letter. |
+
+---
+
+## 🛠️ Tech Stack
+
+- **Frontend:** Single-file HTML PWA (vanilla JS, no framework)
+- **Hosting:** GitHub Pages
+- **Backend:** [Supabase](https://supabase.com) (PostgreSQL + Realtime + Storage + Auth + Edge Functions)
+- **Auth:** Email/password + Google OAuth
+- **Real-time sync:** Supabase Realtime (WebSockets)
+- **AI proxy:** Supabase Edge Functions → Google Gemini (free tier)
+- **Translation:** MyMemory API (free, no key required)
+- **Push notifications:** Web Push API + VAPID
+- **Languages:** ES 🇪🇸 · EN 🇬🇧 · RU 🇷🇺 · PT 🇧🇷 · FR 🇫🇷 · DE 🇩🇪
+
+---
+
+## 🏗️ Architecture
+
+```
+duolector.com (GitHub Pages)
+│
+├── index.html          ← entire app (single file)
+├── manifest.json       ← PWA manifest
+├── sw.js               ← service worker
+├── privacy.html        ← privacy policy
+├── terms.html          ← terms of service
+└── .well-known/
+    └── assetlinks.json ← TWA / Android verification
+
+Supabase (sa-east-1, São Paulo)
+│
+├── Database (PostgreSQL + RLS)
+│   ├── profiles
+│   ├── couples / couple_members
+│   ├── messages          (+ image_url)
+│   ├── diary             (+ image_url)
+│   ├── books / pages
+│   ├── sealed_letters    (+ password + read receipts)
+│   ├── journal_reactions
+│   ├── reading_page_log  (anti-scroll validation)
+│   ├── music
+│   └── push_subscriptions
+│
+├── Storage
+│   ├── pdfs              (books)
+│   ├── photos            (chat + diary images)
+│   └── music             (audio files)
+│
+└── Edge Functions
+    ├── ai-proxy          (Gemini API proxy)
+    ├── send-push         (Web Push notifications)
+    └── alice-skill       (Yandex Alice / Алиса skill)
+```
+
+---
+
+## 🚀 How It Works
+
+1. One partner signs up at [duolector.com](https://duolector.com)
+2. Copies their invite code from Settings
+3. Shares it with their partner
+4. Partner joins with the code — connected in seconds
+5. Everything is private to that couple — no one else can see your data
+
+---
+
+## 📱 PWA Install
+
+DuoLector is installable as a native app on any device:
+
+- **Android:** Open in Chrome → "Add to Home Screen" / "Install App"
+- **iOS:** Open in Safari → Share → "Add to Home Screen"
+- **Desktop:** Chrome address bar → install icon
+
+No app store required.
+
+---
+
+## 🌍 Why it works in Russia
+
+Supabase servers are located in **São Paulo, Brazil** — not blocked in Russia. The app works perfectly in Yandex Browser and all other browsers without VPN.
+
+---
+
+## 🔒 Privacy & Security
+
+- All data is isolated per couple using Supabase **Row Level Security (RLS)**
+- Each couple can only access their own data
+- No analytics cookies, no advertising
+- PDF files and photos stored in private Supabase Storage buckets
+- API keys are stored in Supabase Edge Function secrets — never exposed to the client
+
+---
+
+## 💛 Support
+
+DuoLector is free and always will be. If it helps your relationship survive the distance, consider supporting:
+
+[![Ko-fi](https://img.shields.io/badge/Support%20on-Ko--fi-FF5E5B?logo=ko-fi&logoColor=white)](https://ko-fi.com/T6T71WJ3XF)
+
+---
+
+## 📄 Legal
+
+- [Privacy Policy](https://duolector.com/privacy.html)
+- [Terms of Service](https://duolector.com/terms.html)
+
+---
+
+## 👤 Author
+
+Built by **Matias Sosa** — a developer in Uruguay building this for his partner in Izhevsk, Russia. 14,000 km apart.
+
+📧 matiass161@gmail.com
+
+---
+
+*Приложение для пар на расстоянии · App gratuita para parejas a distancia · Free app for long-distance couples*
