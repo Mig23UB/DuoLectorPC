@@ -1,0 +1,1 @@
+self.__SSG_MANIFEST=new Set(["\u002Fleer\u002F[slug]","\u002Fpequenos\u002Fcolorear\u002F[id]","\u002Fpequenos\u002Frepasar\u002F[id]","\u002Furuguay\u002F[id]"]);self.__SSG_MANIFEST_CB&&self.__SSG_MANIFEST_CB()
