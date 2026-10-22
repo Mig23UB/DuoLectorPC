@@ -1,0 +1,288 @@
+/* ══════════════════════════════════════════════════════════════════
+   DuoLector · Tema 2026 — "amanecer sobre el prado"
+   Capa visual sobre la app original. No cambia ninguna función:
+   solo colores, letras, bordes y sombras. Para volver al diseño
+   anterior, quitar la línea <link … tema/duolector-2026.css> del index.
+   ══════════════════════════════════════════════════════════════════ */
+
+/* ── Paleta compartida ── */
+:root {
+  --dl-ink: #221f1c;
+  --dl-paper: #f5f5f5;
+  --dl-white: #ffffff;
+  --dl-stone: #797267;
+  --dl-pebble: #8c8a88;
+  --dl-azure: #518bdb;
+  --dl-teal: #36bab8;
+  --dl-action: linear-gradient(90deg, #518bdb 0%, #36bab8 100%);
+  --dl-mint-wash: #cbfbf1;
+  --dl-peach-wash: #f8ebd8;
+  --dl-lavender-wash: #ede9fe;
+  --dl-teal-mist: #cff2ef;
+  --dl-coral: #ed6d68;
+  --dl-amber: #e5a057;
+  --dl-orchid: #bf89cd;
+  --dl-forest: #1a3a12;
+  --dl-meadow: #3a6b2a;
+  --dl-display: 'Playfair Display', 'Cormorant Garamond', Georgia, serif;
+  --dl-body: 'Inter', 'DM Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --dl-book: 'Lora', 'Cormorant Garamond', Georgia, serif;
+
+  /* Radios del sistema: 8 botones · 14 tarjetas chicas · 18 tarjetas grandes */
+  --r: 14px; --r-sm: 8px; --r-lg: 18px; --radius-sm: 14px;
+}
+
+/* ── Noche (tema oscuro): se conserva el cielo estrellado, con los acentos nuevos ── */
+:root, body:not([data-theme="light"]) {
+  --amber: #e5a057; --amber-s: rgba(229,160,87,.14);
+  --rose: #ed6d68;  --rose-s: rgba(237,109,104,.14);
+  --ice: #6fd0ce;   --mint: #7fd49b; --lav: #bf89cd;
+}
+
+/* ── Día (tema claro): papel tibio y tinta, como el estilo Micro ── */
+[data-theme="light"] {
+  --bg: #f5f5f5; --bg2: #efeeec; --surface: #ebeae7; --surface2: #e4e2de;
+  --card: #ffffff; --card2: #fbfaf8;
+  --border: rgba(34,31,28,.07); --border2: rgba(34,31,28,.13);
+  --glass2: rgba(255,255,255,.94);
+  --text: #221f1c; --text2: #797267; --muted: #8c8a88; --dim: #e2dfda;
+  --amber: #518bdb; --amber-s: rgba(81,139,219,.12);
+  --rose: #ed6d68;  --rose-s: rgba(237,109,104,.12);
+  --ice: #36bab8;   --mint: #2f8f5b; --lav: #bf89cd;
+  --shadow: 0 1px 3px rgba(0,0,0,.08), 0 1px 2px -1px rgba(0,0,0,.08);
+  --shadow-lg: 0 10px 15px -3px rgba(0,0,0,.08), 0 4px 6px -4px rgba(0,0,0,.08);
+  --glow-amber: none; --glow-rose: none;
+}
+
+/* ── Letras ── */
+body { font-family: var(--dl-body); letter-spacing: -0.005em; }
+.auth-title,
+.clock-time,
+.countdown-num,
+.dec-title,
+.diary-full-title,
+.diary-sheet-title,
+.display,
+.fire-streak-num,
+.home-greeting,
+.ls-name,
+.modal-title,
+.page-title,
+.sb-days-num,
+.stat-value,
+.tb-title,
+[style*="Cormorant"] {
+  font-family: var(--dl-display) !important;
+  font-weight: 600 !important;
+  letter-spacing: .02em !important;
+}
+.reader-txt, .reader-txt-page { font-family: var(--dl-book) !important; }
+.auth-sub { font-family: var(--dl-body) !important; letter-spacing: .01em !important; }
+.auth-title { letter-spacing: .04em !important; font-weight: 700 !important; }
+.ls-name { letter-spacing: .06em; font-weight: 700 !important; }
+
+/* ── Acción principal: un solo degradé azul → turquesa, en los dos temas ── */
+.btn-primary, .chat-send-btn, .mp-btn,
+.toggle-wrap input:checked + .toggle-label {
+  background: var(--dl-action) !important;
+  color: #fff !important;
+  box-shadow: 0 1px 2px rgba(0,0,0,.15), inset 0 -2px 0 rgba(0,0,0,.12) !important;
+}
+.btn-primary { border-radius: 8px !important; font-weight: 600 !important; }
+.btn-primary:hover { background: var(--dl-action) !important; filter: brightness(1.05); transform: translateY(-1px) !important; box-shadow: 0 6px 16px -4px rgba(81,139,219,.45) !important; }
+.btn-primary:active { transform: none !important; box-shadow: inset 0 -2px 0 rgba(0,0,0,.2) !important; }
+.mine .msg-bubble { background: var(--dl-action) !important; color: #fff !important; box-shadow: 0 2px 8px -2px rgba(54,186,184,.45) !important; }
+.mine .msg-bubble * { color: inherit; }
+
+/* Números y saludos con degradé: tonos nuevos (noche) */
+.sb-days-num, .countdown-num, .home-greeting em {
+  background: linear-gradient(90deg, #e5a057 0%, #ed6d68 100%);
+  -webkit-background-clip: text; background-clip: text;
+}
+.ls-name { background: linear-gradient(90deg, #e5a057 0%, #ed6d68 55%, #bf89cd 100%); -webkit-background-clip: text; background-clip: text; }
+
+/* ══════════════════════════  TEMA CLARO  ══════════════════════════ */
+
+/* Cielo de amanecer suave arriba, papel abajo */
+[data-theme="light"] body,
+body[data-theme="light"] { background: #f5f5f5; }
+body[data-theme="light"]::after {
+  opacity: 1 !important;
+  background:
+    linear-gradient(180deg, rgba(81,139,219,.20) 0%, rgba(54,186,184,.12) 16%, rgba(207,242,239,.10) 30%, rgba(245,245,245,0) 46%),
+    #f5f5f5 !important;
+}
+
+/* Pantalla de entrada = el "hero": cielo azul → turquesa sobre un prado */
+body[data-theme="light"] .auth-screen {
+  background:
+    radial-gradient(120% 60% at 50% 108%, #7fbf6a 0%, #4f8f3c 38%, rgba(58,107,42,0) 62%),
+    linear-gradient(180deg, #518bdb 0%, #4aa3cc 45%, #36bab8 78%, #a9e3d6 100%) !important;
+}
+body[data-theme="light"] .auth-title {
+  background: none !important; -webkit-text-fill-color: #fff !important; color: #fff !important;
+  text-shadow: 0 2px 18px rgba(18,40,80,.18);
+}
+body[data-theme="light"] .auth-sub,
+body[data-theme="light"] .auth-tagline-wrap,
+body[data-theme="light"] .auth-tagline { color: rgba(255,255,255,.92) !important; -webkit-text-fill-color: rgba(255,255,255,.92) !important; }
+body[data-theme="light"] .auth-card {
+  background: #fff !important;
+  border: 1px solid #1a3a12 !important;
+  border-radius: 18px !important;
+  box-shadow: 0 25px 50px -12px rgba(0,0,0,.25) !important;
+  backdrop-filter: none !important;
+}
+body[data-theme="light"] .auth-card::before { display: none !important; }
+body[data-theme="light"] .auth-tab.active {
+  background: #f5f5f5 !important; border: 1px solid rgba(34,31,28,.08) !important;
+  color: #221f1c !important; -webkit-text-fill-color: #221f1c !important;
+}
+
+/* Barras, menú lateral y tarjetas: superficies blancas con borde fino */
+body[data-theme="light"] #topbar,
+body[data-theme="light"] .topbar,
+body[data-theme="light"] #bottom-nav,
+body[data-theme="light"] .bottom-nav {
+  background: rgba(255,255,255,.86) !important;
+  border-color: rgba(34,31,28,.07) !important;
+  backdrop-filter: saturate(1.4) blur(12px);
+  box-shadow: 0 1px 0 rgba(34,31,28,.05) !important;
+}
+body[data-theme="light"] #desktop-sidebar,
+body[data-theme="light"] .desktop-sidebar,
+body[data-theme="light"] #sidebar,
+body[data-theme="light"] .sidebar {
+  background: #fbfaf8 !important;
+  border-color: rgba(34,31,28,.07) !important;
+}
+body[data-theme="light"] .sb-link { border-radius: 8px !important; color: #221f1c !important; }
+body[data-theme="light"] .sb-link.active {
+  background: #fff !important; border: 1px solid rgba(34,31,28,.08) !important;
+  box-shadow: 0 1px 2px rgba(0,0,0,.06) !important; font-weight: 600;
+}
+body[data-theme="light"] .sb-days-box {
+  background: #cff2ef !important; border: 0 !important; border-radius: 14px !important;
+}
+body[data-theme="light"] .sb-days-num,
+body[data-theme="light"] .countdown-num,
+body[data-theme="light"] .home-greeting em,
+body[data-theme="light"] .ls-name {
+  background: var(--dl-action) !important;
+  -webkit-background-clip: text !important; background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+}
+body[data-theme="light"] .page-title,
+body[data-theme="light"] .modal-title,
+body[data-theme="light"] .tb-title,
+body[data-theme="light"] .clock-time { -webkit-text-fill-color: #221f1c !important; }
+
+body[data-theme="light"] .card,
+body[data-theme="light"] .countdown-card,
+body[data-theme="light"] .clock-card,
+body[data-theme="light"] .modal-box,
+body[data-theme="light"] #modal-box {
+  background: #fff !important;
+  border: 1px solid rgba(34,31,28,.07) !important;
+  border-radius: 18px !important;
+  box-shadow: 0 1px 3px rgba(0,0,0,.08), 0 1px 2px -1px rgba(0,0,0,.08) !important;
+}
+body[data-theme="light"] .countdown-card { background: #f8ebd8 !important; border: 0 !important; }
+body[data-theme="light"] .quote-card { background: #ede9fe !important; border-left: 3px solid #bf89cd !important; border-radius: 14px !important; }
+
+/* Acceso rápido: cada tarjeta con su lavado pastel */
+body[data-theme="light"] .qg-item {
+  border: 0 !important; border-radius: 18px !important; box-shadow: none !important; backdrop-filter: none !important;
+}
+body[data-theme="light"] .qg-item:nth-child(4n+1) { background: #cff2ef !important; }
+body[data-theme="light"] .qg-item:nth-child(4n+2) { background: #f8ebd8 !important; }
+body[data-theme="light"] .qg-item:nth-child(4n+3) { background: #ede9fe !important; }
+body[data-theme="light"] .qg-item:nth-child(4n+4) { background: #cbfbf1 !important; }
+body[data-theme="light"] .qg-item:hover { filter: brightness(.98); transform: translateY(-1px); }
+
+/* Píldoras de días y kilómetros */
+body[data-theme="light"] .tb-days { background: #cbfbf1 !important; border: 0 !important; color: #1f5f45 !important; }
+body[data-theme="light"] .tb-km { background: #e3eefb !important; border: 0 !important; color: #2c5a9c !important; }
+
+/* Campos de texto */
+body[data-theme="light"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="file"]),
+body[data-theme="light"] textarea,
+body[data-theme="light"] select {
+  background: #fff !important;
+  border: 1px solid rgba(34,31,28,.12) !important;
+  border-radius: 8px !important;
+  color: #221f1c !important;
+}
+body[data-theme="light"] input:focus,
+body[data-theme="light"] textarea:focus,
+body[data-theme="light"] select:focus {
+  outline: none !important;
+  box-shadow: 0 0 0 2px #518bdb !important;
+  border-color: transparent !important;
+}
+body[data-theme="light"] ::placeholder { color: #8c8a88 !important; }
+
+/* Mensajes del otro en el chat */
+body[data-theme="light"] .theirs .msg-bubble,
+body[data-theme="light"] :not(.mine) > .msg-bubble {
+  background: #fff;
+  border: 1px solid rgba(34,31,28,.07);
+  color: #221f1c;
+}
+
+/* ══════════════════════════  TEMA NOCHE  ══════════════════════════ */
+/* Se mantiene el cielo estrellado. Solo se afinan bordes y botones. */
+body:not([data-theme="light"]) .auth-card { border-radius: 18px !important; }
+body:not([data-theme="light"]) .auth-tab.active {
+  background: rgba(81,139,219,.16) !important; border-color: rgba(54,186,184,.35) !important;
+}
+body:not([data-theme="light"]) .sb-link.active {
+  background: linear-gradient(90deg, rgba(81,139,219,.14), rgba(54,186,184,.08)) !important;
+  border-color: rgba(54,186,184,.22) !important;
+}
+body:not([data-theme="light"]) .qg-item { border-radius: 18px !important; }
+
+/* Enfoque visible con teclado, en los dos temas */
+:focus-visible { outline: 2px solid #518bdb !important; outline-offset: 2px; }
+
+/* ── Ajustes finos ── */
+
+/* Entrada en tema claro: el cielo nuevo se ve sin el dibujo de fondo anterior */
+body[data-theme="light"] #auth-canvas,
+body[data-theme="light"] .auth-nebula { display: none !important; }
+body[data-theme="light"] .auth-screen [class*="stat"],
+body[data-theme="light"] .auth-screen [class*="eyebrow"] { color: rgba(255,255,255,.9) !important; -webkit-text-fill-color: rgba(255,255,255,.9) !important; }
+
+/* Relojes: tarjetas blancas sobre el papel (antes quedaban rosadas) */
+body[data-theme="light"] [class*="clock"]:not(.clock-card) { background: transparent !important; border-color: transparent !important; box-shadow: none !important; }
+
+/* Chat: mis mensajes y el botón de enviar con el degradé nuevo (los dos temas) */
+.tg-send {
+  background: var(--dl-action) !important;
+  box-shadow: 0 6px 18px -6px rgba(54,186,184,.55), inset 0 -2px 0 rgba(0,0,0,.12) !important;
+  color: #fff !important;
+}
+.tg-row.mine .tg-bubble {
+  color: #fff !important;
+  background: linear-gradient(165deg, #518bdb 0%, #36bab8 100%) !important;
+  box-shadow: 0 1px 2px rgba(0,0,0,.12), 0 8px 20px -10px rgba(54,186,184,.6) !important;
+}
+.tg-row.mine.tail .tg-bubble::after { background: #36bab8 !important; }
+.tg-row.mine .tg-time { color: rgba(255,255,255,.78) !important; }
+.tg-row.mine .tg-bubble a { color: #fff !important; text-decoration: underline; }
+.tg-field:focus-within { border-color: rgba(81,139,219,.55) !important; box-shadow: 0 0 0 3px rgba(81,139,219,.14) !important; }
+
+/* Chat en tema claro: la cabecera y la barra de escribir ya no quedan oscuras */
+body[data-theme="light"] .tg-head {
+  background: linear-gradient(180deg, rgba(255,255,255,.96), rgba(255,255,255,.80) 72%, rgba(255,255,255,0)) !important;
+  border-color: rgba(34,31,28,.07) !important;
+}
+body[data-theme="light"] .tg-composer {
+  background: linear-gradient(0deg, rgba(245,245,245,.98), rgba(245,245,245,.7) 72%, rgba(245,245,245,0)) !important;
+}
+body[data-theme="light"] .tg-field { background: #fff !important; border: 1px solid rgba(34,31,28,.12) !important; }
+body[data-theme="light"] .tg-row.theirs .tg-bubble {
+  background: #fff !important; border: 1px solid rgba(34,31,28,.08) !important;
+  backdrop-filter: none !important; box-shadow: 0 1px 2px rgba(0,0,0,.05) !important;
+}
+body[data-theme="light"] .tg-row.theirs.tail .tg-bubble::after { background: #fff !important; }
