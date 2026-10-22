@@ -204,14 +204,16 @@ a{text-decoration:none;color:inherit;cursor:pointer}
 /* ── Desktop ── */
 @media(min-width:768px){
   body{background:var(--bg2)}
-  #app{max-width:1200px;margin:0 auto}
+  #app{max-width:none;margin:0}
   #desktop-sidebar{display:flex}
   .tb-menu-btn{display:flex!important}
   #bottom-nav{display:none}
   .page{padding-bottom:16px}
   #sidebar-overlay,#sidebar{display:none!important}
 }
-@media(min-width:1024px){#app{max-width:1400px}#desktop-sidebar{width:260px}}
+@media(min-width:1024px){#desktop-sidebar{width:260px}}
+body.dl-draw-full #topbar,body.dl-draw-full #desktop-sidebar,body.dl-draw-full #bottom-nav{display:none!important}
+body.dl-draw-full #page-draw{padding-bottom:0}
 
 /* ── Utilities ── */
 .display{font-family:'Cormorant Garamond',serif}
@@ -323,6 +325,8 @@ a{text-decoration:none;color:inherit;cursor:pointer}
 #sidebar.on{transform:translateX(0)}
 .sb-head{display:flex;align-items:center;gap:8px;padding:16px;border-bottom:1px solid var(--border);flex-shrink:0}
 .sb-head .tb-icon-btn{margin-left:auto}
+.sb-header{display:flex;align-items:center;gap:10px;padding:14px 16px 10px}
+#desktop-sidebar .sb-user-card,#desktop-sidebar .sb-days-box{margin-left:12px;margin-right:12px}
 .sb-user-card{display:flex;align-items:center;gap:10px;padding:12px;background:var(--card);border-radius:var(--r);border:1px solid var(--border);margin-bottom:8px}
 .sb-user-emoji{font-size:1.5rem;width:36px;height:36px;display:flex;align-items:center;justify-content:center;background:var(--surface2);border-radius:10px;flex-shrink:0}
 .sb-user-name{font-weight:600;font-size:.88rem}
@@ -3252,7 +3256,7 @@ const Router = (() => {
     stats:      { get init() { return PageStats.init; },      title: 'Estadísticas 📊' },
     challenges: { get init() { return PageChallenges.init; }, title: 'Retos 🔥' },
     letters:    { get init() { return PageLetters.init; },    title: 'Cartas 💌' },
-    assistant:  { get init() { return PageAssistant.init; },  title: 'Asistente ✨' },
+    assistant:  { get init() { return PageHome.init; },       title: 'DuoLector' }, // el Asistente se quitó; enlaces viejos van al inicio
     config:     { get init() { return PageConfig.init; },     title: 'Ajustes ⚙️' },
   };
 
@@ -3271,6 +3275,7 @@ const Router = (() => {
 
     Sidebar.updateActive(pageId);
 
+    document.body.classList.remove('dl-draw-full');
     _container.innerHTML = '';
     const page = document.createElement('div');
     page.className = 'page active';
@@ -3728,7 +3733,7 @@ const Sidebar = (() => {
         <div class="sb-user-emoji">${profile.emoji || '😊'}</div>
         <div class="sb-user-info">
           <div class="sb-user-name">${Utils.escHtml(profile.display_name || '')}</div>
-          <div class="sb-user-role">${partner ? `with ${Utils.escHtml(partner.display_name)} ${partner.emoji||'❤️'}` : `<span style="color:var(--amber);cursor:pointer" onclick="Router.go('config');Sidebar.close()">${t.connect} →</span>`}</div>
+          <div class="sb-user-role">${partner ? `${({es:'con',ru:'с',pt:'com'})[lang]||'with'} ${Utils.escHtml(partner.display_name)} ${partner.emoji||'❤️'}` : `<span style="color:var(--amber);cursor:pointer" onclick="Router.go('config');Sidebar.close()">${t.connect} →</span>`}</div>
         </div>
       </div>` : ''}
 
@@ -3756,7 +3761,6 @@ const Sidebar = (() => {
         <a class="sb-link" onclick="Router.go('draw');Sidebar.close()"><span class="sb-ico">🎨</span>${t.draw}</a>
         <a class="sb-link" onclick="Router.go('translate');Sidebar.close()"><span class="sb-ico">🌍</span>${t.translate}</a>
         <a class="sb-link" onclick="Router.go('letters');Sidebar.close()"><span class="sb-ico">💌</span>${lang==='ru'?'Письма':lang==='en'?'Letters':'Cartas'}</a>
-        <a class="sb-link" onclick="Router.go('assistant');Sidebar.close()"><span class="sb-ico">✨</span>${lang==='ru'?'Ассистент':lang==='en'?'Assistant':'Asistente'}</a>
 
         <div class="sb-label" style="margin-top:8px"></div>
         <a class="sb-link" onclick="Router.go('config');Sidebar.close()"><span class="sb-ico">⚙️</span>${t.settings}</a>
@@ -3931,7 +3935,7 @@ const PageHome = (() => {
     // Hero
     var daySub = daysTogether !== null ? (' · ' + daysTogether + ' ' + (lang==='ru'?'дней вместе':'días juntos')) : '';
     html += '<div class="home-hero" style="position:relative">';
-    html += '<div style="font-size:.75rem;color:var(--muted);margin-bottom:4px;letter-spacing:.04em;text-transform:uppercase">' + now.toLocaleDateString(lang==='ru'?'ru':'en',{weekday:'long',day:'numeric',month:'long'}) + '</div>';
+    html += '<div style="font-size:.75rem;color:var(--muted);margin-bottom:4px;letter-spacing:.04em;text-transform:uppercase">' + now.toLocaleDateString(lang==='ru'?'ru':lang==='es'?'es':'en',{weekday:'long',day:'numeric',month:'long'}) + '</div>';
     html += '<div class="home-greeting" style="font-size:1.6rem;line-height:1.2;margin-bottom:6px">' + greeting + ', <em style="color:var(--amber)">' + Utils.escHtml(user ? user.display_name||'' : '') + '</em></div>';
     html += (daysTogether !== null ? '<div style="display:inline-flex;align-items:center;gap:6px;background:linear-gradient(135deg,rgba(232,168,74,.15),rgba(224,120,144,.1));border:1px solid rgba(232,168,74,.2);border-radius:20px;padding:4px 12px;font-size:.78rem;color:var(--amber);margin-bottom:14px">' +
       '💛 ' + daysTogether + ' ' + (lang==='ru'?'дней вместе':lang==='es'?'días juntos':'days together') +
@@ -4417,7 +4421,7 @@ const PageChat = (() => {
         '<div id="chat-count" class="tg-head-count"></div>' +
       '</header>' +
       // Messages area
-      '<div id="chat-msgs" style="position:relative;z-index:1;flex:1;overflow-y:auto;display:flex;flex-direction:column;scroll-behavior:smooth;overscroll-behavior:contain">' +
+      '<div id="chat-msgs" style="position:relative;z-index:1;flex:1;overflow-y:auto;display:flex;flex-direction:column;overscroll-behavior:contain">' +
         '<div style="flex:1"></div>' +
         '<div id="chat-msgs-inner" style="display:flex;flex-direction:column"></div>' +
       '</div>' +
@@ -4655,10 +4659,35 @@ const PageChat = (() => {
       '</div></div></div>';
     });
 
+    const area = document.getElementById('chat-msgs');
+    const firstPaint = !inner.hasChildNodes() || !!inner.querySelector('.tg-empty');
     inner.innerHTML = html;
-    if (scroll) { const area = document.getElementById('chat-msgs'); if (area) area.scrollTop = area.scrollHeight; }
+    if (area && !area._dlStick) {
+      // Seguir el último mensaje: mientras la persona esté abajo, quedarse abajo
+      // aunque carguen fotos, cambie el tamaño o llegue un mensaje nuevo.
+      area._dlStick = true;
+      area.addEventListener('scroll', () => {
+        area._dlAtBottom = (area.scrollHeight - area.scrollTop - area.clientHeight) < 80;
+      }, {passive:true});
+      if (typeof ResizeObserver !== 'undefined') {
+        const ro = new ResizeObserver(() => { if (area._dlAtBottom !== false) _toBottom(area); });
+        ro.observe(inner); ro.observe(area);
+      }
+    }
+    if (area && (scroll || firstPaint || area._dlAtBottom !== false)) {
+      area._dlAtBottom = true;
+      _toBottom(area);
+      inner.querySelectorAll('img').forEach(im => {
+        if (!im.complete) im.addEventListener('load', () => { if (area._dlAtBottom) _toBottom(area); }, {once:true});
+      });
+    }
     const cnt = document.getElementById('chat-count');
     if (cnt) cnt.textContent = _msgs.length + ' msgs';
+  }
+
+  function _toBottom(area) {
+    const go = () => { area.style.scrollBehavior = 'auto'; area.scrollTop = area.scrollHeight; area.style.scrollBehavior = ''; };
+    go(); requestAnimationFrame(go); setTimeout(go, 120); setTimeout(go, 400);
   }
 
   function _resize(el) {
@@ -6722,7 +6751,7 @@ const PageDraw = (() => {
 
     container.innerHTML =
       // Toolbar
-      '<div style="display:flex;align-items:center;gap:6px;padding:6px 10px;background:var(--glass2);border-bottom:1px solid var(--border);flex-shrink:0;overflow-x:auto;-webkit-overflow-scrolling:touch">' +
+      '<div class="draw-toolbar" style="display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;padding:6px 10px;background:var(--glass2);border-bottom:1px solid var(--border);flex-shrink:0">' +
 
         // Tool buttons
         '<div style="display:flex;gap:3px;flex-shrink:0">' +
@@ -6753,6 +6782,7 @@ const PageDraw = (() => {
           '<button onclick="PageDraw._resetView()" title="Reset view" style="' + _actStyle() + '">⌂</button>' +
           '<button onclick="PageDraw._clear()" title="Clear" style="' + _actStyle() + '">🗑</button>' +
           '<button onclick="PageDraw._savePng()" title="Save PNG" style="' + _actStyle() + '">↓</button>' +
+          '<button id="draw-full-btn" onclick="PageDraw._toggleFull()" title="' + (lang==='ru'?'Во весь экран':lang==='en'?'Bigger canvas':'Ampliar pizarra') + '" style="' + _actStyle() + ';width:auto;padding:0 10px;gap:6px;font-size:.75rem;font-weight:600"></button>' +
         '</div>' +
       '</div>' +
 
@@ -6805,6 +6835,22 @@ const PageDraw = (() => {
 
     _loadSaved();
     _initRealtime();
+    var pref=null; try{ pref=localStorage.getItem('dl_draw_full'); }catch{}
+    _setFull(pref===null ? window.innerWidth>=768 : pref==='1');
+  }
+
+  // Pizarra amplia: oculta la barra superior, el menú lateral y la barra de abajo
+  // para que la pizarra use toda la pantalla. El botón para volver queda siempre visible.
+  function _setFull(on) {
+    document.body.classList.toggle('dl-draw-full', !!on);
+    var b=document.getElementById('draw-full-btn'); if(!b)return;
+    var lang=State.get('profile')?.lang||'es';
+    b.innerHTML = on ? ('⤡ ' + (lang==='ru'?'Меню':lang==='en'?'Show menu':'Ver menú')) : ('⤢ ' + (lang==='ru'?'Шире':lang==='en'?'Bigger':'Ampliar'));
+  }
+  function _toggleFull() {
+    var on=!document.body.classList.contains('dl-draw-full');
+    try{ localStorage.setItem('dl_draw_full', on?'1':'0'); }catch{}
+    _setFull(on);
   }
 
   function _tbStyle(id) {
@@ -6842,41 +6888,89 @@ const PageDraw = (() => {
     _ctx.scale(_zoom, _zoom);
     _ctx.drawImage(_vc, 0, 0);
     _ctx.restore();
+    _overlay();
     var lbl = document.getElementById('zoom-lbl');
     if (lbl) lbl.textContent = Math.round(_zoom*100) + '%';
   }
 
   function _s2v(sx, sy) { return { x:(sx-_vpx)/_zoom, y:(sy-_vpy)/_zoom }; }
 
-  function _applyStyle(ctx) {
+  // Cada trazo es independiente: el mío y el de mi pareja nunca comparten el
+  // mismo camino, así dibujar a la vez no se mezcla como si fueran dos dedos.
+  // Lápiz y goma se dibujan por segmentos; el marcador se arma en una capa
+  // aparte y se pega entero al terminar, para que su transparencia quede pareja.
+  var _mine = null;          // trazo local en curso {tool,color,size,pts,last}
+  var _remote = {};          // trazos de la pareja en curso, por autor
+  var _out = [], _outT = null, _strokeSeq = 0;
+
+  function _styleFor(ctx, st) {
     ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-    ctx.globalCompositeOperation = _tool==='eraser' ? 'destination-out' : 'source-over';
-    ctx.globalAlpha  = _tool==='marker' ? 0.4 : 1;
-    ctx.strokeStyle  = _color;
-    ctx.lineWidth    = _size;
+    ctx.globalCompositeOperation = st.tool==='eraser' ? 'destination-out' : 'source-over';
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = st.color; ctx.lineWidth = st.size;
+  }
+  function _seg(st, x, y) {
+    if (st.tool === 'marker') { st.pts.push([x, y]); return; }
+    var a = st.last || [x, y];
+    _vctx.save(); _styleFor(_vctx, st);
+    _vctx.beginPath(); _vctx.moveTo(a[0], a[1]);
+    if (a[0]===x && a[1]===y) _vctx.lineTo(x + 0.01, y); else _vctx.lineTo(x, y);
+    _vctx.stroke(); _vctx.restore();
+    st.last = [x, y];
+  }
+  function _pathOf(ctx, pts) {
+    ctx.beginPath(); ctx.moveTo(pts[0][0], pts[0][1]);
+    if (pts.length === 1) ctx.lineTo(pts[0][0] + 0.01, pts[0][1]);
+    for (var i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+  }
+  function _commit(st) {
+    if (!st || st.tool !== 'marker' || !st.pts.length) return;
+    _vctx.save(); _styleFor(_vctx, st); _vctx.globalAlpha = 0.4;
+    _pathOf(_vctx, st.pts); _vctx.stroke(); _vctx.restore();
+    st.pts = [];
+  }
+  function _overlay() {
+    var live = [];
+    if (_mine && _mine.tool === 'marker' && _mine.pts.length) live.push(_mine);
+    Object.keys(_remote).forEach(function(k){ var r=_remote[k]; if (r.tool==='marker' && r.pts.length) live.push(r); });
+    if (!live.length) return;
+    _ctx.save(); _ctx.translate(_vpx, _vpy); _ctx.scale(_zoom, _zoom);
+    live.forEach(function(st){ _styleFor(_ctx, st); _ctx.globalAlpha = 0.4; _pathOf(_ctx, st.pts); _ctx.stroke(); });
+    _ctx.restore();
+  }
+
+  function _begin(sx, sy) {
+    var pt=_s2v(sx, sy);
+    _drawing=true;
+    _mine = { id: (State.get('profile')?.id||'me') + ':' + (++_strokeSeq), tool:_tool, color:_color, size:_size, pts:[], last:null };
+    _seg(_mine, pt.x, pt.y); _redraw();
+    _queue('start', pt.x, pt.y);
+  }
+  function _extend(sx, sy) {
+    if (!_drawing || !_mine) return;
+    var pt=_s2v(sx, sy);
+    _seg(_mine, pt.x, pt.y); _redraw(); _schedSave();
+    _queue('move', pt.x, pt.y);
+  }
+  function _finish() {
+    if (!_drawing) return;
+    _drawing=false; _commit(_mine); _mine=null; _redraw();
+    _saveHistory(); _queue('end', 0, 0); _flush();
   }
 
   function _md(e) {
-    // Ignore mouse events when touch is active (prevents dual-input drift)
-    if (Object.keys(_touches).length > 0) return;
+    if (e.button !== undefined && e.button !== 0) return;
     if (_tool==='pan') { _panning=true; _panStartX=e.clientX; _panStartY=e.clientY; _panVpx=_vpx; _panVpy=_vpy; _cv.style.cursor='grabbing'; return; }
-    var r=_cv.getBoundingClientRect(), pt=_s2v(e.clientX-r.left, e.clientY-r.top);
-    _drawing=true;
-    _applyStyle(_vctx); _vctx.beginPath(); _vctx.moveTo(pt.x, pt.y);
-    _broadcastPt('start', pt.x, pt.y);
+    var r=_cv.getBoundingClientRect(); _begin(e.clientX-r.left, e.clientY-r.top);
   }
   function _mm(e) {
-    if (Object.keys(_touches).length > 0) return; // ignore mouse when touching
-    var r=_cv.getBoundingClientRect();
     if (_panning) { _vpx=_panVpx+(e.clientX-_panStartX); _vpy=_panVpy+(e.clientY-_panStartY); _redraw(); return; }
     if (!_drawing) return;
-    var pt=_s2v(e.clientX-r.left, e.clientY-r.top);
-    _vctx.lineTo(pt.x, pt.y); _vctx.stroke(); _redraw(); _schedSave();
-    _broadcastPt('move', pt.x, pt.y);
+    var r=_cv.getBoundingClientRect(); _extend(e.clientX-r.left, e.clientY-r.top);
   }
   function _mu() {
     if (_panning) { _panning=false; _cv.style.cursor=_tool==='pan'?'grab':'crosshair'; return; }
-    if (_drawing) { _drawing=false; _saveHistory(); _broadcastPt('end',0,0); }
+    _finish();
   }
   function _mw(e) {
     e.preventDefault();
@@ -6884,28 +6978,33 @@ const PageDraw = (() => {
     _zoomAt(mx, my, e.deltaY<0?1.12:0.89);
   }
 
+  // Los toques se toman siempre de la lista real del navegador (e.touches), así
+  // un dedo "fantasma" que no avisó al soltarse nunca bloquea el dibujo.
+  function _sync(e) {
+    _touches = {};
+    Array.from(e.touches).forEach(function(t){ _touches[t.identifier]=t; });
+    return Object.keys(_touches);
+  }
   function _ts(e) {
     e.preventDefault();
-    Array.from(e.changedTouches).forEach(t=>{ _touches[t.identifier]=t; });
-    var ids=Object.keys(_touches);
-    if (ids.length===2) {
-      _drawing=false;
+    var ids=_sync(e);
+    if (ids.length>=2) {
+      if (_drawing) _finish();
+      _panning=false;
       var t1=_touches[ids[0]], t2=_touches[ids[1]];
       _lastPinchDist=_dist(t1,t2); _lastMidX=(t1.clientX+t2.clientX)/2; _lastMidY=(t1.clientY+t2.clientY)/2;
       return;
     }
     if (ids.length===1 && _tool==='pan') { _panning=true; _panStartX=_touches[ids[0]].clientX; _panStartY=_touches[ids[0]].clientY; _panVpx=_vpx; _panVpy=_vpy; return; }
-    if (ids.length===1) {
-      var t=_touches[ids[0]], r2=_cv.getBoundingClientRect(), pt=_s2v(t.clientX-r2.left, t.clientY-r2.top);
-      _drawing=true; _applyStyle(_vctx); _vctx.beginPath(); _vctx.moveTo(pt.x,pt.y);
-      _broadcastPt('start',pt.x,pt.y);
+    if (ids.length===1 && !_lastPinchDist) {
+      var t=_touches[ids[0]], r2=_cv.getBoundingClientRect();
+      _begin(t.clientX-r2.left, t.clientY-r2.top);
     }
   }
   function _tm(e) {
     e.preventDefault();
-    Array.from(e.changedTouches).forEach(t=>{ _touches[t.identifier]=t; });
-    var ids=Object.keys(_touches);
-    if (ids.length===2 && _lastPinchDist) {
+    var ids=_sync(e);
+    if (ids.length>=2 && _lastPinchDist) {
       var t1=_touches[ids[0]], t2=_touches[ids[1]];
       var d=_dist(t1,t2), mx=(t1.clientX+t2.clientX)/2, my=(t1.clientY+t2.clientY)/2;
       var r3=_cv.getBoundingClientRect();
@@ -6918,19 +7017,15 @@ const PageDraw = (() => {
       var t4=_touches[ids[0]]; _vpx=_panVpx+(t4.clientX-_panStartX); _vpy=_panVpy+(t4.clientY-_panStartY); _redraw(); return;
     }
     if (_drawing && ids.length===1) {
-      var t5=_touches[ids[0]], r4=_cv.getBoundingClientRect(), pt2=_s2v(t5.clientX-r4.left, t5.clientY-r4.top);
-      _vctx.lineTo(pt2.x,pt2.y); _vctx.stroke(); _redraw(); _schedSave();
-      _broadcastPt('move',pt2.x,pt2.y);
+      var t5=_touches[ids[0]], r4=_cv.getBoundingClientRect();
+      _extend(t5.clientX-r4.left, t5.clientY-r4.top);
     }
   }
   function _te(e) {
     e.preventDefault();
-    Array.from(e.changedTouches).forEach(t=>{ delete _touches[t.identifier]; });
-    if (Object.keys(_touches).length<2) { _lastPinchDist=null; }
-    if (Object.keys(_touches).length===0) {
-      _panning=false;
-      if (_drawing) { _drawing=false; _saveHistory(); _broadcastPt('end',0,0); }
-    }
+    var ids=_sync(e);
+    if (ids.length===0) { _lastPinchDist=null; _panning=false; _finish(); }
+    else if (ids.length<2) { _lastPinchDist = _lastPinchDist ? -1 : null; }
   }
   function _dist(t1,t2) { return Math.hypot(t1.clientX-t2.clientX,t1.clientY-t2.clientY); }
 
@@ -6977,48 +7072,88 @@ const PageDraw = (() => {
   function _clear() { _vctx.clearRect(0,0,VSIZE,VSIZE); _saveHistory(); _redraw(); _schedSave(); }
   function _savePng() { var a=document.createElement('a'); a.href=_vc.toDataURL('image/png'); a.download='duolector-drawing.png'; a.click(); }
 
+  // Los dibujos viejos se guardaban en JPEG, que no tiene transparencia: el fondo
+  // vacío volvía negro. Al abrirlos, el negro puro vuelve a ser transparente.
+  function _clearBlack() {
+    try {
+      var STEP=400;
+      for(var y0=0;y0<VSIZE;y0+=STEP){
+        var im=_vctx.getImageData(0,y0,VSIZE,STEP), d=im.data, hit=false;
+        for(var i=0;i<d.length;i+=4){ if(d[i]<14&&d[i+1]<14&&d[i+2]<14){ d[i+3]=0; hit=true; } }
+        if(hit) _vctx.putImageData(im,0,y0);
+      }
+    } catch {}
+  }
   function _schedSave() { clearTimeout(_saveTimer); _saveTimer=setTimeout(_autoSave,2000); }
   async function _autoSave() {
     var coupleId=AppAuth.currentCoupleId(); if(!coupleId)return;
-    try { await DB.setSetting(coupleId,'drawing',_vc.toDataURL('image/jpeg',0.65)); } catch {}
+    try { await DB.setSetting(coupleId,'drawing',_vc.toDataURL('image/webp',0.85)); } catch {}
   }
   async function _loadSaved() {
     var coupleId=AppAuth.currentCoupleId(); if(!coupleId)return;
     try {
       var d=await DB.getSetting(coupleId,'drawing');
       if(!d||!d.startsWith('data:')){_saveHistory();return;}
-      var img=new Image(); img.onload=()=>{ _vctx.clearRect(0,0,VSIZE,VSIZE); _vctx.drawImage(img,0,0); _saveHistory(); _redraw(); }; img.src=d;
+      var img=new Image(); img.onload=()=>{ _vctx.clearRect(0,0,VSIZE,VSIZE); _vctx.drawImage(img,0,0); if(d.startsWith('data:image/jpeg')) _clearBlack(); _saveHistory(); _redraw(); }; img.src=d;
     } catch { _saveHistory(); }
   }
 
-  function _broadcastPt(type,x,y) {
-    if(!_channel)return;
-    try { _channel.send({type:'broadcast',event:'draw',payload:{type,x,y,tool:_tool,color:_color,size:_size,by:State.get('profile')?.id}}); } catch {}
+  // Los puntos se mandan en paquetes cada ~60 ms: el canal en tiempo real
+  // descarta mensajes si se envían demasiados por segundo y eso cortaba líneas.
+  function _queue(type,x,y) {
+    if(!_channel||!_mine&&type!=='end')return;
+    var st=_mine||{};
+    if(type==='start'){ _flush(); _out=[{type:'start',x:x,y:y,sid:st.id,tool:st.tool,color:st.color,size:st.size}]; }
+    else if(type==='move'){ var last=_out[_out.length-1]; if(last&&last.type==='move'){ last.pts.push([Math.round(x*10)/10,Math.round(y*10)/10]); last.x=x; last.y=y; } else _out.push({type:'move',pts:[[x,y]],x:x,y:y}); }
+    else _out.push({type:'end'});
+    if(!_outT) _outT=setTimeout(_flush,60);
+  }
+  function _flush() {
+    clearTimeout(_outT); _outT=null;
+    if(!_channel||!_out.length){ _out=[]; return; }
+    var me=State.get('profile')?.id, batch=_out; _out=[];
+    var head=batch.find(function(b){return b.type==='start';});
+    batch.forEach(function(b){
+      var payload={type:b.type,x:b.x||0,y:b.y||0,pts:b.pts,sid:b.sid,tool:b.tool||_tool,color:b.color||_color,size:b.size||_size,by:me};
+      try { _channel.send({type:'broadcast',event:'draw',payload:payload}); } catch {}
+    });
+  }
+  function _onRemote(p) {
+    var me=State.get('profile')?.id;
+    if(!p||p.by===me)return;
+    var key=p.by||'pareja';
+    if(p.type==='start'){
+      if(_remote[key]) _commit(_remote[key]);
+      _remote[key]={tool:p.tool,color:p.color,size:p.size,pts:[],last:null};
+      _seg(_remote[key],p.x,p.y);
+    } else if(p.type==='move'){
+      var st=_remote[key];
+      if(!st){ st=_remote[key]={tool:p.tool,color:p.color,size:p.size,pts:[],last:null}; }
+      (p.pts||[[p.x,p.y]]).forEach(function(q){ _seg(st,q[0],q[1]); });
+    } else if(p.type==='end'){
+      _commit(_remote[key]); delete _remote[key]; _schedSave();
+    }
+    _redraw();
+    var partner=State.get('partner');
+    var lbl=document.getElementById('draw-partner');
+    if(lbl&&partner){
+      var lang=State.get('profile')?.lang||'es';
+      var verb=lang==='ru'?' рисует…':lang==='en'?' is drawing…':' está dibujando…';
+      lbl.style.display='block';lbl.textContent=(partner.emoji||'✏️')+' '+partner.display_name+verb;clearTimeout(lbl._t);lbl._t=setTimeout(()=>{lbl.style.display='none';},2000);
+    }
   }
   function _initRealtime() {
     var coupleId=AppAuth.currentCoupleId(); if(!coupleId)return;
     try {
+      if(_channel){ try{ DB.client().removeChannel(_channel); }catch{} _channel=null; }
+      _remote={};
       _channel=DB.client().channel('draw-'+coupleId);
-      _channel.on('broadcast',{event:'draw'},({payload:p})=>{
-        if(!p||p.by===State.get('profile')?.id)return;
-        var prev={op:_vctx.globalCompositeOperation,alpha:_vctx.globalAlpha,color:_vctx.strokeStyle,w:_vctx.lineWidth};
-        _vctx.lineCap='round'; _vctx.lineJoin='round';
-        _vctx.globalCompositeOperation=p.tool==='eraser'?'destination-out':'source-over';
-        _vctx.globalAlpha=p.tool==='marker'?0.4:1; _vctx.strokeStyle=p.color; _vctx.lineWidth=p.size;
-        if(p.type==='start'){_vctx.beginPath();_vctx.moveTo(p.x,p.y);}
-        else if(p.type==='move'){_vctx.lineTo(p.x,p.y);_vctx.stroke();_redraw();}
-        else if(p.type==='end'){_schedSave();}
-        _vctx.globalCompositeOperation=prev.op;_vctx.globalAlpha=prev.alpha;_vctx.strokeStyle=prev.color;_vctx.lineWidth=prev.w;
-        // Show partner drawing label
-        var partner=State.get('partner');
-        var lbl=document.getElementById('draw-partner');
-        if(lbl&&partner){lbl.style.display='block';lbl.textContent=(partner.emoji||'✏️')+' '+partner.display_name+' is drawing…';clearTimeout(lbl._t);lbl._t=setTimeout(()=>{lbl.style.display='none';},2000);}
-      });
+      _channel.on('broadcast',{event:'draw'},function(m){ _onRemote(m&&m.payload); });
       _channel.subscribe();
     } catch {}
   }
 
-  return { init, _pickTool, _pickColor, _pickSize, _undo, _redo, _clear, _savePng, _resetView };
+  return { init, _pickTool, _pickColor, _pickSize, _undo, _redo, _clear, _savePng, _resetView, _toggleFull };
 })();
 
 
@@ -7368,112 +7503,193 @@ const PageStats = (() => {
 
 // ── CHALLENGES PAGE ───────────────────────────────────────────────────────────
 const PageChallenges = (() => {
-
-  const CHALLENGES = [
-    { key:'read_7_days',  ico:'📖', xp:50,  target:7,  es:'Lector dedicado',    ru:'Преданный читатель',   des_es:'Lee 7 días seguidos',              des_ru:'Читай 7 дней подряд' },
-    { key:'msgs_50',      ico:'💬', xp:30,  target:50, es:'Conversadores',      ru:'Собеседники',          des_es:'50 mensajes este mes',             des_ru:'50 сообщений в этом месяце' },
-    { key:'diary_5',      ico:'📔', xp:40,  target:5,  es:'Cronistas',          ru:'Летописцы',            des_es:'5 entradas de diario',             des_ru:'5 записей в дневник' },
-    { key:'draw_3',       ico:'🎨', xp:25,  target:3,  es:'Artistas',           ru:'Художники',            des_es:'Dibujen juntos 3 veces',           des_ru:'Рисуйте вместе 3 раза' },
-    { key:'translate_20', ico:'🌍', xp:20,  target:20, es:'Políglota',          ru:'Полиглот',             des_es:'Usen el traductor 20 veces',       des_ru:'Используйте переводчик 20 раз' },
-    { key:'book_finish',  ico:'📚', xp:100, target:1,  es:'Terminar un libro',  ru:'Дочитать книгу',       des_es:'Terminen un libro juntos',         des_ru:'Дочитайте книгу вместе' },
-    { key:'streak_30',    ico:'🔥', xp:150, target:30, es:'Racha épica',        ru:'Эпическая серия',      des_es:'30 días de racha',                 des_ru:'30 дней подряд' },
-    { key:'online_20',    ico:'⭐', xp:60,  target:20, es:'Siempre conectados', ru:'Всегда на связи',      des_es:'Entren 20 días este mes',          des_ru:'Входите 20 дней в этом месяце' },
+  // Retos de la semana: tres cosas pequeñas para hacer juntos. Cambian cada lunes.
+  // Cada uno marca cuando lo hizo; cuando lo marcan los dos, queda "hecho juntos".
+  // Sin puntos, sin rachas que se pierden y sin apuros.
+  // Se guarda en settings con una clave por persona (retos_<semana>_<id>), así
+  // los dos pueden marcar a la vez sin pisarse.
+  const POOL = [
+    { key:'blind_draw', ico:'🎨', go:'draw',
+      t:{es:'Dibujo a ciegas',en:'Blind drawing',ru:'Рисунок вслепую'},
+      d:{es:'Uno describe algo por el chat sin decir qué es. El otro lo dibuja en la pizarra. Después cambian.',
+         en:'One describes something in the chat without naming it. The other draws it on the board. Then swap.',
+         ru:'Один описывает что-то в чате, не называя. Другой рисует это на доске. Потом меняетесь.'} },
+    { key:'three_words', ico:'🗣️', go:'chat',
+      t:{es:'Tres palabras',en:'Three words',ru:'Три слова'},
+      d:{es:'Enseñale tres palabras de tu idioma. Tu pareja tiene que usarlas en una frase.',
+         en:'Teach three words of your language. Your partner uses them in a sentence.',
+         ru:'Научи трём словам своего языка. Партнёр составляет с ними предложение.'} },
+    { key:'same_chapter', ico:'📖', go:'library',
+      t:{es:'El mismo capítulo',en:'Same chapter',ru:'Одна глава'},
+      d:{es:'Lean el mismo capítulo y cuéntense la frase que más les gustó.',
+         en:'Read the same chapter and share the line you liked most.',
+         ru:'Прочитайте одну главу и поделитесь фразой, которая понравилась больше всего.'} },
+    { key:'sunday_letter', ico:'💌', go:'letters',
+      t:{es:'Carta para el domingo',en:'A letter for Sunday',ru:'Письмо на воскресенье'},
+      d:{es:'Escribí una carta que se abra el domingo.',
+         en:'Write a letter that unlocks on Sunday.',
+         ru:'Напиши письмо, которое откроется в воскресенье.'} },
+    { key:'our_song', ico:'🎵', go:'music',
+      t:{es:'Su canción',en:'Your song',ru:'Ваша песня'},
+      d:{es:'Elegí una canción que te recuerde a tu pareja y escúchenla juntos.',
+         en:'Pick a song that reminds you of your partner and listen together.',
+         ru:'Выбери песню, которая напоминает о партнёре, и послушайте вместе.'} },
+    { key:'sky_photo', ico:'🌌', go:'chat',
+      t:{es:'El cielo de hoy',en:"Today's sky",ru:'Сегодняшнее небо'},
+      d:{es:'Mandá una foto del cielo donde estás. Mismo cielo, dos lugares.',
+         en:'Send a photo of the sky where you are. Same sky, two places.',
+         ru:'Отправь фото неба там, где ты. Одно небо, два места.'} },
+    { key:'best_moment', ico:'📔', go:'diary',
+      t:{es:'Lo mejor de la semana',en:'Best of the week',ru:'Лучшее за неделю'},
+      d:{es:'Escriban en el diario el mejor momento de la semana, aunque sea chiquito.',
+         en:'Write the best moment of your week in the diary, even a small one.',
+         ru:'Запишите в дневник лучший момент недели, даже маленький.'} },
+    { key:'question', ico:'💭', go:'chat', q:true,
+      t:{es:'La pregunta de la semana',en:'Question of the week',ru:'Вопрос недели'},
+      d:{es:'Respondan los dos en el chat:',en:'Both answer in the chat:',ru:'Ответьте оба в чате:'} },
+    { key:'dream_place', ico:'🏡', go:'draw',
+      t:{es:'Nuestro lugar',en:'Our place',ru:'Наше место'},
+      d:{es:'Dibujen juntos, a la vez, el lugar donde les gustaría vivir.',
+         en:'Draw together, at the same time, the place where you would like to live.',
+         ru:'Нарисуйте вместе, одновременно, место, где хотели бы жить.'} },
+    { key:'translate_line', ico:'🌍', go:'translate',
+      t:{es:'Una frase en tu idioma',en:'A line in their language',ru:'Фраза на твоём языке'},
+      d:{es:'Traducí una frase bonita al idioma de tu pareja y mandásela.',
+         en:"Translate a sweet line into your partner's language and send it.",
+         ru:'Переведи красивую фразу на язык партнёра и отправь.'} },
+    { key:'plan_meet', ico:'✈️', go:'diary',
+      t:{es:'Cuando nos veamos',en:'When we meet',ru:'Когда увидимся'},
+      d:{es:'Anoten en el diario tres cosas para hacer juntos la próxima vez que se vean.',
+         en:'Write three things to do together next time you meet.',
+         ru:'Запишите три вещи, которые сделаете вместе при следующей встрече.'} },
   ];
+  const QUESTIONS = [
+    {es:'¿Qué te hizo reír esta semana?',en:'What made you laugh this week?',ru:'Что рассмешило тебя на этой неделе?'},
+    {es:'¿Qué lugar del mundo te gustaría conocer conmigo?',en:'Which place in the world would you like to see with me?',ru:'Какое место в мире ты хотел(а) бы увидеть со мной?'},
+    {es:'¿Cuál es tu recuerdo favorito de nosotros?',en:'What is your favorite memory of us?',ru:'Какое твоё любимое воспоминание о нас?'},
+    {es:'¿Qué comida de mi país querés probar?',en:'Which food from my country do you want to try?',ru:'Какую еду из моей страны ты хочешь попробовать?'},
+    {es:'¿Qué te gustaría aprender este año?',en:'What would you like to learn this year?',ru:'Чему ты хотел(а) бы научиться в этом году?'},
+    {es:'¿Cómo sería un domingo perfecto juntos?',en:'What would a perfect Sunday together look like?',ru:'Каким было бы идеальное воскресенье вместе?'},
+    {es:'¿Qué canción te pone de buen humor?',en:'Which song puts you in a good mood?',ru:'Какая песня поднимает тебе настроение?'},
+    {es:'¿Qué es algo que nunca te dije y te gustaría saber?',en:"What's something you'd like to know that I never told you?",ru:'Что ты хотел(а) бы узнать обо мне, чего я никогда не рассказывал(а)?'},
+  ];
+  const GO_LABEL = {
+    chat:{es:'Ir al chat',en:'Open chat',ru:'Открыть чат'}, draw:{es:'Ir a la pizarra',en:'Open board',ru:'Открыть доску'},
+    library:{es:'Ir a la biblioteca',en:'Open library',ru:'Открыть библиотеку'}, letters:{es:'Escribir carta',en:'Write letter',ru:'Написать письмо'},
+    music:{es:'Ir a música',en:'Open music',ru:'Открыть музыку'}, diary:{es:'Ir al diario',en:'Open diary',ru:'Открыть дневник'},
+    translate:{es:'Ir al traductor',en:'Open translator',ru:'Открыть переводчик'},
+  };
+  let _state = { week:null, mine:[], theirs:[], lang:'es', container:null };
+
+  function _L(o, lang) { return o[lang] || o.es; }
+  function _week(d) {
+    const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+    const day = t.getUTCDay() || 7; t.setUTCDate(t.getUTCDate() + 4 - day);
+    const y0 = new Date(Date.UTC(t.getUTCFullYear(), 0, 1));
+    return { id: t.getUTCFullYear() + '-W' + String(Math.ceil(((t - y0) / 86400000 + 1) / 7)).padStart(2, '0'),
+             n: Math.floor(t.getTime() / (7 * 86400000)) };
+  }
+  function _picks(n) { return [0,1,2].map(i => POOL[(n * 3 + i) % POOL.length]); }
+  function _ids() {
+    const me = State.get('profile')?.id, p = State.get('partner');
+    return { me, partner: p ? (p.user_id || p.id) : null };
+  }
 
   async function init(container) {
     const lang = State.get('profile')?.lang || 'es';
-    container.innerHTML = '<div class="page-title display">Challenges 🔥</div>' +
-      '<div style="padding:0 16px;display:flex;flex-direction:column;gap:10px;margin-top:16px">' +
-      Array(4).fill('<div style="height:90px;background:var(--surface2);border-radius:var(--r);animation:pulse 1.5s infinite"></div>').join('') +
-      '</div>';
+    const w = _week(new Date());
+    _state = { week:w, mine:[], theirs:[], lang, container };
+    _render();
+    const coupleId = AppAuth.currentCoupleId(), ids = _ids();
+    if (!coupleId) return;
+    try {
+      const [a, b] = await Promise.all([
+        DB.getSetting(coupleId, 'retos_' + w.id + '_' + ids.me),
+        ids.partner ? DB.getSetting(coupleId, 'retos_' + w.id + '_' + ids.partner) : null,
+      ]);
+      _state.mine = _parse(a); _state.theirs = _parse(b);
+    } catch {}
+    if (_state.container === container) _render();
+  }
+  function _parse(v) { try { const x = JSON.parse(v || '[]'); return Array.isArray(x) ? x : []; } catch { return []; } }
 
-    const coupleId = AppAuth.currentCoupleId();
-    const month = new Date().toISOString().slice(0,7);
-    const progress = {};
-
-    if (coupleId) {
-      try {
-        const rows = await DB.get('challenges', { eq: [['couple_id', coupleId], ['month', month]] });
-        rows.forEach(function(r) { progress[r.key] = r; });
-
-        const monthStart = new Date(month + '-01');
-        const msgs  = await DB.get('messages', { eq: [['couple_id', coupleId]], select: 'id,created_at' });
-        const diary = await DB.get('diary',    { eq: [['couple_id', coupleId]], select: 'id,created_at' });
-        const books = await DB.get('books',    { eq: [['couple_id', coupleId]], select: 'id,progress_pct' });
-
-        const msgsMonth  = msgs.filter(function(m)  { return new Date(m.created_at) >= monthStart; }).length;
-        const diaryMonth = diary.filter(function(d) { return new Date(d.created_at) >= monthStart; }).length;
-        const booksDone  = books.filter(function(b) { return b.progress_pct >= 100; }).length;
-        const streak     = KM ? KM.streak : 0;
-
-        progress['msgs_50']     = { progress: msgsMonth,          completed: msgsMonth  >= 50 };
-        progress['diary_5']     = { progress: diaryMonth,         completed: diaryMonth >= 5  };
-        progress['book_finish'] = { progress: booksDone,          completed: booksDone  >= 1  };
-        progress['streak_30']   = { progress: streak,             completed: streak     >= 30 };
-        progress['read_7_days'] = { progress: Math.min(streak,7), completed: streak     >= 7  };
-      } catch(e) { console.error('challenges', e); }
+  async function _toggle(key) {
+    const coupleId = AppAuth.currentCoupleId(), ids = _ids();
+    const has = _state.mine.includes(key);
+    _state.mine = has ? _state.mine.filter(k => k !== key) : _state.mine.concat(key);
+    _render();
+    if (!has && typeof Toast !== 'undefined' && Toast.show) {
+      const both = _state.theirs.includes(key);
+      const l = _state.lang;
+      Toast.show(both ? _L({es:'¡Lo hicieron juntos! 💛',en:'Done together! 💛',ru:'Сделано вместе! 💛'},l)
+                      : _L({es:'Marcado. Falta tu pareja.',en:'Marked. Waiting for your partner.',ru:'Отмечено. Ждём партнёра.'},l));
     }
-
-    _render(container, progress, lang, month);
+    if (coupleId && ids.me) {
+      try { await DB.setSetting(coupleId, 'retos_' + _state.week.id + '_' + ids.me, JSON.stringify(_state.mine)); } catch {}
+    }
   }
 
-  function _card(ch, p, lang) {
-    var cur  = Math.min((p && p.progress) || 0, ch.target);
-    var pct  = Math.round(cur / ch.target * 100);
-    var done = (p && p.completed) || pct >= 100;
-    var title      = lang === 'ru' ? ch.ru      : ch.es;
-    var desc       = lang === 'ru' ? ch.des_ru  : ch.des_es;
-    var doneText   = lang === 'ru' ? 'Выполнено ✓' : 'Completado ✓';
-    var cardBorder = done ? 'border-color:rgba(112,200,160,.4);background:rgba(112,200,160,.05)' : '';
-    var barBg      = done ? 'var(--mint)' : 'linear-gradient(90deg,var(--amber),var(--rose))';
-    var icon       = done ? '✅' : ch.ico;
-    var pctLabel   = pct + '%' + (done ? ' · ' + doneText : '');
+  function _render() {
+    const c = _state.container; if (!c) return;
+    const l = _state.lang, partner = State.get('partner');
+    const pName = partner ? Utils.escHtml(partner.display_name) : _L({es:'Tu pareja',en:'Your partner',ru:'Партнёр'}, l);
+    const me = _L({es:'Vos',en:'You',ru:'Ты'}, l);
+    const picks = _picks(_state.week.n);
+    const doneBoth = picks.filter(ch => _state.mine.includes(ch.key) && _state.theirs.includes(ch.key)).length;
+    const q = QUESTIONS[_state.week.n % QUESTIONS.length];
 
-    return '<div class="card" style="margin-bottom:10px;' + cardBorder + '">' +
-      '<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">' +
-        '<div style="width:42px;height:42px;background:var(--surface2);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:1.3rem;flex-shrink:0">' + icon + '</div>' +
-        '<div style="flex:1">' +
-          '<div style="font-weight:600;font-size:.88rem">' + title + '</div>' +
-          '<div style="font-size:.72rem;color:var(--muted)">' + desc + '</div>' +
-        '</div>' +
-        '<div style="font-size:.72rem;color:var(--amber);font-weight:700;flex-shrink:0">+' + ch.xp + ' km</div>' +
-      '</div>' +
-      '<div style="display:flex;justify-content:space-between;font-size:.7rem;color:var(--muted);margin-bottom:4px">' +
-        '<span>' + cur + ' / ' + ch.target + '</span>' +
-        '<span>' + pctLabel + '</span>' +
-      '</div>' +
-      '<div style="height:6px;background:var(--surface2);border-radius:3px;overflow:hidden">' +
-        '<div style="height:100%;width:' + pct + '%;background:' + barBg + ';border-radius:3px;transition:width .8s"></div>' +
-      '</div>' +
-    '</div>';
+    const pill = (who, ok) => '<span class="reto-pill' + (ok ? ' ok' : '') + '">' + (ok ? '✓ ' : '') + who + '</span>';
+    const cards = picks.map(ch => {
+      const mine = _state.mine.includes(ch.key), theirs = _state.theirs.includes(ch.key), both = mine && theirs;
+      const desc = _L(ch.d, l) + (ch.q ? ' <strong class="reto-q">' + _L(q, l) + '</strong>' : '');
+      return '<article class="reto-card' + (both ? ' both' : '') + '">' +
+        '<div class="reto-top"><span class="reto-ico" aria-hidden="true">' + (both ? '💛' : ch.ico) + '</span>' +
+          '<div class="reto-txt"><h3>' + _L(ch.t, l) + '</h3><p>' + desc + '</p></div></div>' +
+        '<div class="reto-foot">' +
+          '<div class="reto-who">' + pill(me, mine) + pill(pName, theirs) + '</div>' +
+          (both ? '<span class="reto-done">' + _L({es:'Hecho juntos',en:'Done together',ru:'Сделано вместе'}, l) + '</span>' : '') +
+          '<div class="reto-act">' +
+            '<button class="btn btn-ghost btn-sm" onclick="Router.go(\'' + ch.go + '\')">' + _L(GO_LABEL[ch.go], l) + '</button>' +
+            '<button class="btn ' + (mine ? 'btn-ghost' : 'btn-primary') + ' btn-sm" onclick="PageChallenges._toggle(\'' + ch.key + '\')">' +
+              (mine ? _L({es:'Desmarcar',en:'Undo',ru:'Отменить'}, l) : _L({es:'Lo hice',en:'I did it',ru:'Я сделал(а)'}, l)) + '</button>' +
+          '</div>' +
+        '</div></article>';
+    }).join('');
+
+    c.innerHTML =
+      '<style>' +
+      '.reto-wrap{padding:0 20px 24px;display:flex;flex-direction:column;gap:14px;max-width:1100px}' +
+      '.reto-intro{font-size:.9rem;color:var(--text2);line-height:1.55;max-width:640px}' +
+      '.reto-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px}' +
+      '.reto-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg,18px);padding:18px;display:flex;flex-direction:column;gap:16px;justify-content:space-between}' +
+      '.reto-card.both{border-color:rgba(112,200,160,.45);background:linear-gradient(160deg,rgba(112,200,160,.12),var(--surface))}' +
+      '.reto-top{display:flex;gap:14px;align-items:flex-start}' +
+      '.reto-ico{width:48px;height:48px;border-radius:14px;background:var(--surface2);display:grid;place-items:center;font-size:1.5rem;flex-shrink:0}' +
+      '.reto-txt h3{margin:0 0 4px;font-size:1.02rem;font-weight:600}' +
+      '.reto-txt p{margin:0;font-size:.86rem;line-height:1.5;color:var(--text2)}' +
+      '.reto-q{display:block;margin-top:6px;color:var(--text);font-weight:600}' +
+      '.reto-foot{display:flex;flex-wrap:wrap;align-items:center;gap:10px}' +
+      '.reto-who{display:flex;gap:6px;flex-wrap:wrap}' +
+      '.reto-pill{font-size:.72rem;padding:4px 10px;border-radius:999px;border:1px dashed var(--border);color:var(--muted)}' +
+      '.reto-pill.ok{border-style:solid;border-color:rgba(112,200,160,.5);color:var(--mint,#70c8a0);background:rgba(112,200,160,.1)}' +
+      '.reto-done{font-size:.74rem;font-weight:700;color:var(--mint,#70c8a0)}' +
+      '.reto-act{margin-left:auto;display:flex;gap:6px}' +
+      '.reto-sum{display:flex;align-items:center;gap:12px;padding:14px 16px;border-radius:var(--r,14px);background:var(--surface);border:1px solid var(--border);font-size:.85rem;color:var(--text2)}' +
+      '.reto-dots{display:flex;gap:6px}.reto-dots i{width:12px;height:12px;border-radius:50%;background:var(--surface2);display:block}.reto-dots i.on{background:var(--mint,#70c8a0)}' +
+      '</style>' +
+      '<div class="page-title display">' + _L({es:'Retos de la semana',en:'This week together',ru:'Задания недели'}, l) + '</div>' +
+      '<div class="page-sub">' + _L({es:'Cambian cada lunes',en:'New ones every Monday',ru:'Новые каждый понедельник'}, l) + '</div>' +
+      '<div class="reto-wrap">' +
+        '<p class="reto-intro">' + _L({es:'Tres cosas pequeñas para hacer juntos, aunque estén lejos. Sin puntos ni apuros: cada uno marca cuando lo hizo.',
+                                      en:'Three small things to do together, even from far away. No points, no rush: each of you marks it when done.',
+                                      ru:'Три небольших дела, чтобы сделать вместе, даже на расстоянии. Без очков и спешки: каждый отмечает, когда сделал.'}, l) + '</p>' +
+        '<div class="reto-sum"><div class="reto-dots">' + picks.map((_, i) => '<i class="' + (i < doneBoth ? 'on' : '') + '"></i>').join('') + '</div>' +
+          '<span>' + doneBoth + ' / 3 ' + _L({es:'hechos juntos esta semana',en:'done together this week',ru:'сделано вместе на этой неделе'}, l) + '</span></div>' +
+        '<div class="reto-grid">' + cards + '</div>' +
+      '</div>';
   }
 
-  function _render(container, progress, lang, month) {
-    const lv     = KM ? KM.level() : { ico:'🌱', name:'Despegando' };
-    const km     = KM ? KM._total : 0;
-    const streak = KM ? KM.streak : 0;
-    const d      = new Date();
-    const monthName = d.toLocaleDateString(lang==='ru'?'ru':'es', { month:'long', year:'numeric' });
-    const cards  = CHALLENGES.map(function(ch) { return _card(ch, progress[ch.key], lang); }).join('');
-
-    container.innerHTML =
-      '<div class="page-title display">' + (lang==='ru'?'Задания 🔥':'Retos 🔥') + '</div>' +
-      '<div class="page-sub">' + monthName + '</div>' +
-      '<div class="card" style="background:linear-gradient(135deg,rgba(232,168,74,.1),rgba(224,120,144,.08));border-color:rgba(232,168,74,.3);display:flex;align-items:center;gap:14px">' +
-        '<div style="font-size:2.5rem">' + lv.ico + '</div>' +
-        '<div style="flex:1">' +
-          '<div style="font-size:1rem;font-weight:600">' + lv.name + '</div>' +
-          '<div style="font-size:.75rem;color:var(--muted)">' + km.toFixed(1) + ' km · ' + streak + (lang==='ru'?' дней серии':' días de racha') + '</div>' +
-        '</div>' +
-        '<div style="text-align:right">' +
-          '<div class="display" style="font-size:1.6rem;color:var(--amber)">' + (KM?KM.fmt():'0km') + '</div>' +
-        '</div>' +
-      '</div>' +
-      '<div class="section-label">' + (lang==='ru'?('Задания ' + monthName):('Retos de ' + monthName)) + '</div>' +
-      cards;
-  }
-
-  return { init };
+  return { init, _toggle, _week, _picks };
 })();
 
 
@@ -8100,9 +8316,7 @@ const PageLetters = (() => {
         '<div class="form-group"><label class="input-label">🔐 ' + L('Contraseña (opcional)','Password (optional)','Contraseña (opcional)') + '</label>' +
         '<input class="input-field" id="lt-password" type="text" placeholder="' + L('Dejar vacío = sin contraseña','Leave empty = no password','Dejar vacío = sin contraseña') + '">' +
         '<div style="font-size:.68rem;color:var(--amber);margin-top:4px">💡 ' + L('Si ponés contraseña, podrás verla en la carta enviada para recordarla','If set, you can see it in the sent letter so you never forget it','Si ponés contraseña, podrás verla en la carta enviada para recordarla') + '</div></div>' +
-        '<div style="background:var(--amber-soft);border:1px solid rgba(232,168,74,.25);border-radius:12px;padding:10px 12px;font-size:.8rem;color:var(--text2)">' +
-        '✨ ' + L('Podés crear una tarjeta bonita en el Asistente','Create a beautiful card in the Assistant','Podés crear una tarjeta bonita en el Asistente') +
-        ' → <span style="color:var(--amber);cursor:pointer" onclick="Modal.close();Router.go(\'assistant\')">' + L('Abrir Asistente','Open Assistant','Abrir Asistente') + '</span></div>',
+        '',
       footer: '<button class="btn btn-primary btn-full" onclick="PageLetters._saveLetter()">💌 ' + L('Sellar y enviar','Seal & send','Sellar y enviar') + '</button>'
     });
   }
