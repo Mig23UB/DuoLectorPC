@@ -3469,7 +3469,7 @@ const MusicPlayer = (() => {
     if (MusicPlayer._posTimer) clearInterval(MusicPlayer._posTimer);
     MusicPlayer._posTimer = setInterval(() => {
       if (_audio && !_audio.paused && _track) _broadcastMusicState('position');
-    }, 5000);
+    }, 15000);
   }
 
   function stop() {
@@ -4758,14 +4758,21 @@ const PageChat = (() => {
 
   // ── Typing indicator ───────────────────────────────────────────────────────
   let _typingTimer = null;
+  // "Está escribiendo…" viaja por el canal en vivo (antes se guardaba en la base
+  // en cada tecla, lo que gastaba mucho disco). Se manda como mucho cada 1,5 s.
+  let _typingSentAt = 0;
   function _onTyping() {
-    const coupleId = AppAuth.currentCoupleId(); if (!coupleId) return;
     const uid = State.get('profile')?.id;
-    try { DB.setSetting(coupleId, 'typing_' + uid, JSON.stringify({ts:Date.now()})); } catch {}
-    clearTimeout(_typingTimer);
-    _typingTimer = setTimeout(() => {
-      try { DB.setSetting(coupleId, 'typing_' + uid, JSON.stringify({ts:0})); } catch {}
-    }, 2500);
+    if (!_channel || Date.now() - _typingSentAt < 1500) return;
+    _typingSentAt = Date.now();
+    try { _channel.send({type:'broadcast', event:'typing', payload:{by:uid, ts:Date.now()}}); } catch {}
+  }
+  function _showTyping() {
+    const partner = State.get('partner'); const el = document.getElementById('chat-typing');
+    if (!el || !partner) return;
+    const lang = State.get('profile')?.lang || 'es';
+    el.textContent = (partner.emoji||'') + ' ' + partner.display_name + (lang==='ru'?' печатает…':lang==='en'?' is typing…':' está escribiendo…');
+    clearTimeout(_typingTimer); _typingTimer = setTimeout(() => { el.textContent = ''; }, 3000);
   }
 
   // ── Realtime ───────────────────────────────────────────────────────────────
@@ -4773,6 +4780,7 @@ const PageChat = (() => {
     const coupleId = AppAuth.currentCoupleId(); if (!coupleId) return;
     try {
       _channel = DB.client().channel('chat-' + coupleId);
+      _channel.on('broadcast', {event:'typing'}, ({payload:p}) => { if (p && p.by !== State.get('profile')?.id) _showTyping(); });
       _channel.on('broadcast', {event:'msg'}, ({payload:p}) => {
         if (!p?.msg) return;
         const myId = State.get('profile')?.id;
@@ -4848,12 +4856,12 @@ const PageChat = (() => {
           if (typing && raw) {
             const d = JSON.parse(raw);
             if (Date.now() - d.ts < 3000) {
-              typing.textContent = (partner.emoji||'') + ' ' + partner.display_name + ' is typing…';
-            } else { typing.textContent = ''; }
+              typing.textContent = (partner.emoji||'') + ' ' + partner.display_name + ' …';
+            }
           }
         }
       } catch {}
-    }, 8000);
+    }, 15000);
   }
 
   async function _checkOnline() {
@@ -6448,6 +6456,7 @@ const PageMusic = (() => {
     const userId = State.get('profile')?.id;
     if (!coupleId || !userId) return;
     _musicSyncTimer = setInterval(async () => {
+      if (Router.current() !== 'music') { clearInterval(_musicSyncTimer); _musicSyncTimer = null; return; }
       try {
         const raw = await DB.getSetting(coupleId, 'music_sync');
         if (!raw) return;
@@ -7100,10 +7109,12 @@ const PageDraw = (() => {
       }
     } catch {}
   }
-  function _schedSave() { clearTimeout(_saveTimer); _saveTimer=setTimeout(_autoSave,2000); }
+  function _schedSave() { clearTimeout(_saveTimer); _saveTimer=setTimeout(_autoSave,10000); }
+  document.addEventListener('visibilitychange', function(){ if (document.hidden && _saveTimer) { clearTimeout(_saveTimer); _saveTimer=null; _autoSave(); } });
   async function _autoSave() {
     var coupleId=AppAuth.currentCoupleId(); if(!coupleId)return;
-    try { await DB.setSetting(coupleId,'drawing',_vc.toDataURL('image/webp',0.85)); } catch {}
+    _saveTimer=null;
+    try { await DB.setSetting(coupleId,'drawing',_vc.toDataURL('image/webp',0.75)); } catch {}
   }
   async function _loadSaved() {
     var coupleId=AppAuth.currentCoupleId(); if(!coupleId)return;
@@ -7147,7 +7158,7 @@ const PageDraw = (() => {
       if(!st){ st=_remote[key]={tool:p.tool,color:p.color,size:p.size,pts:[],last:null}; }
       (p.pts||[[p.x,p.y]]).forEach(function(q){ _seg(st,q[0],q[1]); });
     } else if(p.type==='end'){
-      _commit(_remote[key]); delete _remote[key]; _schedSave();
+      _commit(_remote[key]); delete _remote[key];
     }
     _redraw();
     var partner=State.get('partner');
